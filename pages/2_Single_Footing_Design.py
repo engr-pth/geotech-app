@@ -12,7 +12,6 @@ from reportlab.platypus import (
     SimpleDocTemplate,
     Spacer,
     Table,
-    TableStyle,
 )
 
 # Page Setup
@@ -44,7 +43,6 @@ with col_in:
     u_moment = "kip-ft" if (is_imperial and not is_ton) else ("ton-m" if is_ton else "kN-m")
     u_stress = "tsf" if (is_imperial and is_ton) else ("ksf" if is_imperial else ("t/m²" if is_ton else "kPa"))
     u_gamma = "pcf" if is_imperial else ("t/m³" if is_ton else "kN/m³")
-    u_rebar = "in" if is_imperial else "mm"
 
     geo_input_mode = st.radio(
         "Geotechnical Calculation Method",
@@ -115,7 +113,8 @@ with col_in:
         cx = col_cx.number_input(f"Column Size cx ({u_len})", 0.1, 5.0, 0.4 if not is_imperial else 1.0)
         cy = col_cy.number_input(f"Column Size cy ({u_len})", 0.1, 5.0, 0.4 if not is_imperial else 1.25)
 
-    Df = st.number_input(f"Embedment Depth Df ({u_len})", 0.0, 20.0, 1.0 if not is_imperial else 3.5)
+    # Embedment depth Df is defined as depth to bottom of footing
+    Df = st.number_input(f"Embedment Depth Df (to Bottom of Footing) ({u_len})", 0.0, 20.0, 1.5 if not is_imperial else 5.0)
     h_foot = st.number_input(f"Footing Thickness h ({u_len})", 0.1, 5.0, 0.45 if not is_imperial else 1.5)
     Dw = st.number_input(f"Water Table Depth Dw ({u_len})", 0.0, 50.0, 0.8 if not is_imperial else 2.5)
 
@@ -128,13 +127,12 @@ with col_in:
 
     rebar_system = st.radio("Rebar Unit System Standard", ["Metric Sizes (mm)", "Imperial Sizes (# / in)"])
 
-    # --- Updated Rebar Dictionary with 22 mm Added ---
     if "Metric" in rebar_system:
         rebar_options = {
             "16 mm": {"dia": 16.0, "area": 201.06, "is_metric": True},
             "18 mm": {"dia": 18.0, "area": 254.47, "is_metric": True},
             "20 mm": {"dia": 20.0, "area": 314.16, "is_metric": True},
-            "22 mm": {"dia": 22.0, "area": 380.13, "is_metric": True},  # <--- Added 22 mm
+            "22 mm": {"dia": 22.0, "area": 380.13, "is_metric": True},
             "25 mm": {"dia": 25.0, "area": 490.87, "is_metric": True},
         }
     else:
@@ -168,7 +166,7 @@ if calc_trigger or "calculated" in st.session_state:
     e_x_total = My_total / P_unfactored if P_unfactored > 0 else 0.0
     e_y_total = Mx_total / P_unfactored if P_unfactored > 0 else 0.0
 
-    # 2. Multi-Layer Surcharge Engine
+    # 2. Multi-Layer Surcharge Engine (Df is depth to base level)
     q_surcharge = 0.0
     current_depth = 0.0
     gamma_w = 62.4 if is_imperial else (1.0 if is_ton else 9.81)
@@ -221,11 +219,10 @@ if calc_trigger or "calculated" in st.session_state:
         q_allow = q_ult / FS
 
     footing_area = B * L
-    # Unfactored Service Load Pressure Check
     q_avg = P_unfactored / footing_area
     q_max_service = q_avg + (6 * Mx_total / (B * (L**2))) + (6 * My_total / (L * (B**2)))
 
-    # 4. Structural Design Calculations (Factored DL & LL)
+    # 4. Structural Design Calculations
     Pu = (1.2 * P_DL) + (1.6 * P_LL)
     Mux_total = (1.2 * Mx_unfactored) + (1.6 * (P_unfactored * abs(ey_input)))
     qu_factored = (Pu / footing_area) + (6 * Mux_total / (B * (L**2)))
@@ -239,7 +236,7 @@ if calc_trigger or "calculated" in st.session_state:
     else:
         lambda_s = 1.0
 
-    # Punching & One-Way Shear
+    # Shear Checks
     if col_shape == "Circular":
         bo = np.pi * (D_col + d_eff)
         Area_bo = (np.pi / 4.0) * ((D_col + d_eff) ** 2)
@@ -269,9 +266,9 @@ if calc_trigger or "calculated" in st.session_state:
         Phi_Vc_punch = ((phi_s * vc_punch * (bo * 12) * (d_eff * 12)) / 1000.0) * force_mult
         Phi_Vc_oneway = ((phi_s * vc_oneway * (L * 12) * (d_eff * 12)) / 1000.0) * force_mult
 
-    # Reinforcement Calculation (Both Direction)
-    Mu_x = (qu_factored * L * (cantilever_x**2)) / 2  # Moment for x-dir steel
-    Mu_y = (qu_factored * B * (cantilever_y**2)) / 2  # Moment for y-dir steel
+    # Reinforcement Calculation
+    Mu_x = (qu_factored * L * (cantilever_x**2)) / 2
+    Mu_y = (qu_factored * B * (cantilever_y**2)) / 2
 
     def calc_rebar_qty(M_val, width_len):
         if not is_imperial:
@@ -299,31 +296,39 @@ if calc_trigger or "calculated" in st.session_state:
         sp = round((total_span - (2 * clear_c)) / max(1, (n_bars - 1)), 1)
         return n_bars, sp
 
-    num_bars_x, spacing_x = calc_rebar_qty(Mu_x, L)  # Bars running in x-direction
-    num_bars_y, spacing_y = calc_rebar_qty(Mu_y, B)  # Bars running in y-direction
-
+    num_bars_x, spacing_x = calc_rebar_qty(Mu_x, L)
+    num_bars_y, spacing_y = calc_rebar_qty(Mu_y, B)
     spacing_unit = "mm" if is_selected_metric else "in"
 
-    # --- Drawing Logic ---
+    # --- Drawing Logic (Corrected Elevation Geometry) ---
     def draw_cross_section():
         fig, ax = plt.subplots(figsize=(6.5, 4.5))
-        f_bottom = -Df - h_foot
-        ax.fill_between([-B / 2 - 1.2, B / 2 + 1.2], [0, 0], [f_bottom - 0.5, f_bottom - 0.5], color="#E5D3B3", alpha=0.5)
-        ax.axhline(0, color="k", linestyle="--", linewidth=1, label="Ground Level")
+
+        # Df is measured from Ground Surface (y=0) to Footing Base (y = -Df)
+        footing_bottom_y = -Df
+        footing_top_y = -Df + h_foot
+
+        # Ground fill
+        ax.fill_between([-B / 2 - 1.2, B / 2 + 1.2], [0, 0], [footing_bottom_y - 0.5, footing_bottom_y - 0.5], color="#E5D3B3", alpha=0.5)
+        ax.axhline(0, color="k", linestyle="--", linewidth=1, label="Ground Level (GL)")
 
         # Water Table Line
-        if Dw <= (Df + h_foot + 0.5):
+        if Dw <= (Df + 0.5):
             ax.axhline(-Dw, color="blue", linestyle="-.", linewidth=1.5, label=f"Water Table (Dw={Dw:.2f}{u_len})")
 
-        ax.add_patch(plt.Rectangle((-B / 2, f_bottom), B, h_foot, facecolor="#9CA3AF", edgecolor="black", linewidth=1.5, label="Footing"))
+        # Footing Patch: Base at y = -Df, Top at y = -Df + h_foot
+        ax.add_patch(plt.Rectangle((-B / 2, footing_bottom_y), B, h_foot, facecolor="#9CA3AF", edgecolor="black", linewidth=1.5, label="Footing"))
 
+        # Column Patch: Starts from Footing Top Level (-Df + h_foot) up to above Ground Level (+0.3)
         col_x_start = ex_input - (cx / 2.0)
+        col_height = (Df - h_foot) + 0.3
         if col_shape == "Circular":
-            ax.add_patch(plt.Rectangle((col_x_start, -Df), cx, Df + 0.3, facecolor="#4B5563", edgecolor="black", linewidth=1.5, label="Circular Col"))
+            ax.add_patch(plt.Rectangle((col_x_start, footing_top_y), cx, col_height, facecolor="#4B5563", edgecolor="black", linewidth=1.5, label="Circular Col"))
         else:
-            ax.add_patch(plt.Rectangle((col_x_start, -Df), cx, Df + 0.3, facecolor="#4B5563", edgecolor="black", linewidth=1.5, label="Column"))
+            ax.add_patch(plt.Rectangle((col_x_start, footing_top_y), cx, col_height, facecolor="#4B5563", edgecolor="black", linewidth=1.5, label="Column"))
 
-        rebar_y_xdir = f_bottom + cover
+        # Rebar Layer (Cover measured from footing bottom)
+        rebar_y_xdir = footing_bottom_y + cover
         left_x = -B / 2 + cover
         right_x = B / 2 - cover
         ax.plot([left_x, right_x], [rebar_y_xdir, rebar_y_xdir], color="red", linewidth=2.0, label=f"x-dir: {num_bars_x}-{selected_rebar}")
@@ -345,11 +350,11 @@ if calc_trigger or "calculated" in st.session_state:
         ax.scatter(x_coords, [rebar_y_xdir + 0.02] * num_bars_x, color="darkblue", s=15, zorder=5, label=f"y-dir: {num_bars_y} Nos")
 
         ax.set_xlim(-B / 2 - 1.0, B / 2 + 1.0)
-        ax.set_ylim(f_bottom - 0.7, 0.5)
+        ax.set_ylim(footing_bottom_y - 0.7, 0.5)
         ax.set_aspect("equal")
         ax.axis("off")
         ax.legend(loc="upper right", fontsize=6.0)
-        plt.title(f"Footing Elevation Section (90-Degree Standard Hook)", fontsize=9, fontweight="bold")
+        plt.title("Footing Elevation Section (Df = Depth to Base)", fontsize=9, fontweight="bold")
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -362,21 +367,17 @@ if calc_trigger or "calculated" in st.session_state:
         fig, ax = plt.subplots(figsize=(6.5, 6.5))
         ax.add_patch(patches.Rectangle((-B / 2, -L / 2), B, L, facecolor="#E5E7EB", edgecolor="black", linewidth=1.5))
 
-        # Rebar Layout in Plan View
         left_x, right_x = -B / 2 + cover, B / 2 - cover
         bot_y, top_y = -L / 2 + cover, L / 2 - cover
 
-        # Draw Exact Number of x-direction bars (Horizontal lines)
         y_pos_list = np.linspace(bot_y, top_y, num_bars_x)
         for y_p in y_pos_list:
             ax.plot([left_x, right_x], [y_p, y_p], color="red", linewidth=1.0, alpha=0.7)
 
-        # Draw Exact Number of y-direction bars (Vertical lines)
         x_pos_list = np.linspace(left_x, right_x, num_bars_y)
         for x_p in x_pos_list:
             ax.plot([x_p, x_p], [bot_y, top_y], color="blue", linewidth=1.0, alpha=0.7)
 
-        # Column Drawing
         if col_shape == "Circular":
             ax.add_patch(patches.Circle((ex_input, ey_input), radius=D_col / 2.0, facecolor="#374151", edgecolor="black", linewidth=1.5, zorder=6))
             ax.text(ex_input, ey_input, f"D={D_col:.2f}", color="white", ha="center", va="center", fontsize=7, fontweight="bold", zorder=7)
@@ -384,13 +385,13 @@ if calc_trigger or "calculated" in st.session_state:
             col_x_min = ex_input - (cx / 2.0)
             col_y_min = ey_input - (cy / 2.0)
             ax.add_patch(patches.Rectangle((col_x_min, col_y_min), cx, cy, facecolor="#374151", edgecolor="black", linewidth=1.5, zorder=6))
-            ax.text(ex_input, ey_input, f"cx={cx:.2f}ft\ncy={cy:.2f}ft", color="white", ha="center", va="center", fontsize=7, fontweight="bold", zorder=7)
+            ax.text(ex_input, ey_input, f"cx={cx:.2f}\ncy={cy:.2f}", color="white", ha="center", va="center", fontsize=7, fontweight="bold", zorder=7)
 
         ax.set_xlim(-B / 2 - 0.8, B / 2 + 0.8)
         ax.set_ylim(-L / 2 - 0.8, L / 2 + 0.8)
         ax.set_aspect("equal")
         ax.axis("off")
-        plt.title(f"Footing Structural Top Plan View (Cover = 3 in)", fontsize=9, fontweight="bold")
+        plt.title("Footing Structural Top Plan View", fontsize=9, fontweight="bold")
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -412,7 +413,7 @@ if calc_trigger or "calculated" in st.session_state:
 
         story = []
         story.append(Paragraph("<b>STRUCTURAL & GEOTECHNICAL FOOTING DESIGN CALCULATION REPORT</b>", title_style))
-        story.append(Paragraph(f"Code Standard: {aci_version} | Unit System: {unit_system} | Clear Cover: 3.0 in (75 mm)<br/>Reinforcement Hook Type: {hook_type}", sub_title_style))
+        story.append(Paragraph(f"Code Standard: {aci_version} | Unit System: {unit_system} | Embedment Depth Df (to Base): {Df:.2f} {u_len}", sub_title_style))
         story.append(Spacer(1, 10))
 
         # 1. Column Loads & Eccentricity
@@ -428,7 +429,7 @@ if calc_trigger or "calculated" in st.session_state:
 
         # 2. Geotechnical Bearing Capacity
         story.append(Paragraph("<b>2. Geotechnical Bearing Capacity (Multi-Layer Engine)</b>", h2_style))
-        story.append(Paragraph(f"• Footing Dimensions: B = {B:.2f} {u_len}, L = {L:.2f} {u_len}, Df = {Df:.2f} {u_len}", normal_style))
+        story.append(Paragraph(f"• Footing Dimensions: B = {B:.2f} {u_len}, L = {L:.2f} {u_len}, Df (Base) = {Df:.2f} {u_len}", normal_style))
         story.append(Paragraph(f"B_eff = {B_eff:.3f} {u_len} | L_eff = {L_eff:.3f} {u_len}", normal_style))
         story.append(Paragraph(f"q_ult = {q_ult:.2f} {u_stress} | q_allow = q_ult / FS = {q_allow:.2f} {u_stress}", normal_style))
         story.append(Paragraph(f"q_max,service = P/A + 6Mx/(BL²) + 6My/(LB²) = <b>{q_max_service:.2f} {u_stress}</b> [{'PASS' if q_max_service <= q_allow else 'FAIL'}]", normal_style))
@@ -479,12 +480,12 @@ if calc_trigger or "calculated" in st.session_state:
         st.markdown(f"• **x-direction Steel:** Provide **{num_bars_x} Nos - {selected_rebar}** @ **{spacing_x} {spacing_unit} c/c**")
         st.markdown(f"• **y-direction Steel:** Provide **{num_bars_y} Nos - {selected_rebar}** @ **{spacing_y} {spacing_unit} c/c**")
 
-        # Drawings Display First
+        # Drawings Display
         st.subheader("4. Detailing Drawings")
-        st.image(sec_img, caption="Footing Elevation Section with Water Table")
+        st.image(sec_img, caption="Footing Elevation Section (Ground to Base = Df)")
         st.image(plan_img, caption="Footing Plan Top View with Dimensions & Rebar Layout")
 
-        # Download PDF Button placed at the VERY BOTTOM after images
+        # Download PDF Button at Bottom
         st.markdown("---")
         st.download_button(
             label="📄 Download Detailed Calculation PDF Report",
