@@ -5,98 +5,100 @@ import streamlit as st
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import letter
 from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.platypus import (
+    Image,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+    TableStyle,
+)
 
 st.set_page_config(
-    page_title="Geotechnical & Structural Footing Suite",
+    page_title="Comprehensive Footing Design Suite",
     page_icon="🏗️",
     layout="wide",
 )
-st.title("🏗️ Geotechnical Bearing Capacity & Structural Footing Suite")
+st.title("🏗️ Geotechnical & Structural Footing Design Suite")
 
-col_in, col_res = st.columns([1, 1.2])
+# --- UI Layout ---
+col_in, col_res = st.columns([1.1, 1.1])
 
 with col_in:
-  # --- 1. Unit System Selection ---
-  st.header("1. Unit System & Standards")
+  st.header("1. General & Unit System")
   unit_system = st.radio(
       "Unit System",
-      [
-          "SI Units (m, kN, kPa)",
-          "Metric Ton System (m, ton, t/m²)",
-          "FPS - Kip System (ft, kips, ksf)",
-          "FPS - Ton System (ft, ton, tsf)",
-      ],
+      ["SI Units (m, kN, kPa, mm)", "FPS System (ft, kips, ksf, in)"],
+  )
+  is_imperial = "FPS" in unit_system
+
+  geo_input_mode = st.radio(
+      "Geotechnical Input Method",
+      ["c-phi Parameters (Analytical)", "SPT N-value (IBC Method)"],
   )
 
-  # Define Labels & Units dynamically
-  if unit_system == "SI Units (m, kN, kPa)":
-    u_len, u_stress, u_gamma = "m", "kPa", "kN/m³"
-    gamma_w_val = 9.81
-    c_default, g_dry_def, g_sat_def = 15.0, 18.0, 20.0
-    b_default, df_default, dw_default = 1.5, 1.0, 0.5
-    u_fc, fc_def, fy_def = "MPa", 28.0, 420.0
-    u_col, col_def, h_def = "m", 0.4, 0.5
-    u_area = "mm²"
+  st.header("2. Soil & Geotechnical Inputs")
+  if geo_input_mode == "c-phi Parameters (Analytical)":
+    method = st.selectbox(
+        "Bearing Capacity Theory",
+        ["Terzaghi Method", "Hansen Method", "Meyerhof Method", "Vesić Method"],
+    )
+    c_val = st.number_input(
+        f"Cohesion c ({'kPa' if not is_imperial else 'ksf'})",
+        0.0,
+        5000.0,
+        15.0 if not is_imperial else 0.3,
+    )
+    phi_val = st.number_input("Friction Angle φ (deg)", 0.0, 45.0, 28.0)
+    N_spt = None
+  else:
+    method = "IBC Presumptive Method"
+    N_spt = st.number_input(
+        "Standard Penetration Resistance (SPT N-Value)", 1, 100, 15
+    )
+    c_val, phi_val = 0.0, 0.0
 
-  elif unit_system == "Metric Ton System (m, ton, t/m²)":
-    u_len, u_stress, u_gamma = "m", "t/m²", "t/m³"
-    gamma_w_val = 1.0
-    c_default, g_dry_def, g_sat_def = 1.5, 1.8, 2.0
-    b_default, df_default, dw_default = 1.5, 1.0, 0.5
-    u_fc, fc_def, fy_def = "MPa", 28.0, 420.0
-    u_col, col_def, h_def = "m", 0.4, 0.5
-    u_area = "cm²"
-
-  elif unit_system == "FPS - Kip System (ft, kips, ksf)":
-    u_len, u_stress, u_gamma = "ft", "ksf", "pcf"
-    gamma_w_val = 62.4
-    c_default, g_dry_def, g_sat_def = 0.3, 115.0, 125.0
-    b_default, df_default, dw_default = 5.0, 3.0, 2.0
-    u_fc, fc_def, fy_def = "psi", 4000.0, 60000.0
-    u_col, col_def, h_def = "ft", 1.5, 1.5
-    u_area = "in²"
-
-  else:  # FPS - Ton System
-    u_len, u_stress, u_gamma = "ft", "tsf (ton/ft²)", "pcf"
-    gamma_w_val = 62.4
-    c_default, g_dry_def, g_sat_def = 0.15, 115.0, 125.0
-    b_default, df_default, dw_default = 5.0, 3.0, 2.0
-    u_fc, fc_def, fy_def = "psi", 4000.0, 60000.0
-    u_col, col_def, h_def = "ft", 1.5, 1.5
-    u_area = "in²"
-
-  method = st.selectbox(
-      "Geotechnical Design Method",
-      ["Terzaghi Method", "Hansen Method", "Meyerhof Method", "Vesić Method"],
+  gamma_dry = st.number_input(
+      f"Dry Unit Weight γ ({'kN/m³' if not is_imperial else 'pcf'})",
+      0.0,
+      500.0,
+      18.0 if not is_imperial else 115.0,
+  )
+  gamma_sat = st.number_input(
+      f"Sat. Unit Weight γ_sat ({'kN/m³' if not is_imperial else 'pcf'})",
+      0.0,
+      500.0,
+      20.0 if not is_imperial else 125.0,
   )
 
-  st.header("2. Soil Parameters")
-  c = st.number_input(f"Cohesion, c ({u_stress})", 0.0, 5000.0, c_default)
-  phi = st.number_input("Friction Angle, φ (deg)", 0.0, 45.0, 28.0)
-  gamma_dry = st.number_input(f"Dry/Moist γ ({u_gamma})", 0.0, 500.0, g_dry_def)
-  gamma_sat = st.number_input(f"Saturated γ_sat ({u_gamma})", 0.0, 500.0, g_sat_def)
-
-  st.header("3. Geometry & Water Table")
-  footing_shape = st.selectbox(
-      "Footing Shape", ["Strip / Continuous", "Square", "Rectangle"]
+  st.header("3. Footing Geometry & Loading")
+  B = st.number_input(
+      f"Width B ({'m' if not is_imperial else 'ft'})",
+      0.5,
+      50.0,
+      1.8 if not is_imperial else 6.0,
   )
-  B = st.number_input(f"Width, B ({u_len})", 0.1, 100.0, b_default)
-
-  max_L = 500.0 if footing_shape == "Strip / Continuous" else 100.0
-  default_L = 500.0 if footing_shape == "Strip / Continuous" else b_default
   L = st.number_input(
-      f"Length, L ({u_len})", min_value=0.1, max_value=max_L, value=default_L
+      f"Length L ({'m' if not is_imperial else 'ft'})",
+      0.5,
+      50.0,
+      1.8 if not is_imperial else 6.0,
   )
+  Df = st.number_input(
+      f"Embedment Depth Df ({'m' if not is_imperial else 'ft'})",
+      0.0,
+      20.0,
+      1.0 if not is_imperial else 3.5,
+  )
+  Dw = st.number_input(
+      f"Water Table Depth Dw ({'m' if not is_imperial else 'ft'})",
+      0.0,
+      50.0,
+      1.0 if not is_imperial else 3.5,
+  )
+  FS = st.number_input("Geotechnical Safety Factor (FS)", 1.0, 10.0, 3.0)
 
-  Df = st.number_input(f"Depth, Df ({u_len})", 0.0, 50.0, df_default)
-  ex = st.number_input(f"Eccentricity e_x ({u_len})", 0.0, B / 2, 0.0)
-  ey = st.number_input(f"Eccentricity e_y ({u_len})", 0.0, L / 2, 0.0)
-  Dw = st.number_input(f"Water Table Depth, Dw ({u_len})", 0.0, 100.0, dw_default)
-  FS = st.number_input("Factor of Safety (FS)", 1.0, 10.0, 3.0)
-
-  # --- Structural Inputs ---
-  st.header("4. Structural Design Parameters (ACI 318)")
+  st.header("4. Structural & Rebar Details")
   aci_version = st.selectbox(
       "ACI 318 Standard Code",
       [
@@ -108,372 +110,293 @@ with col_in:
           "ACI 318-05",
       ],
   )
-
   fc = st.number_input(
-      f"Concrete Compressive Strength, f'c ({u_fc})", 10.0, 10000.0, fc_def
+      f"Concrete Strength f'c ({'MPa' if not is_imperial else 'psi'})",
+      10.0,
+      10000.0,
+      28.0 if not is_imperial else 4000.0,
   )
   fy = st.number_input(
-      f"Steel Yield Strength, fy ({u_fc})", 100.0, 100000.0, fy_def
+      f"Rebar Yield Strength fy ({'MPa' if not is_imperial else 'psi'})",
+      100.0,
+      100000.0,
+      420.0 if not is_imperial else 60000.0,
   )
 
-  c_col1, c_col2 = st.columns(2)
-  cx = c_col1.number_input(f"Column Width, cx ({u_col})", 0.1, 10.0, col_def)
-  cy = c_col2.number_input(f"Column Depth, cy ({u_col})", 0.1, 10.0, col_def)
-  h_foot = st.number_input(f"Total Thickness, h ({u_len})", 0.1, 10.0, h_def)
-
-# --- Geotechnical Calculation Engine ---
-B_eff = max(0.01, B - (2 * ex))
-L_eff = max(0.01, L - (2 * ey))
-
-if unit_system == "FPS - Ton System (ft, ton, tsf)":
-  g_dry_calc = gamma_dry / 2000.0
-  g_sat_calc = gamma_sat / 2000.0
-  gamma_w_calc = 62.4 / 2000.0
-else:
-  g_dry_calc = gamma_dry
-  g_sat_calc = gamma_sat
-  gamma_w_calc = gamma_w_val
-
-if Dw <= Df:
-  q = (Dw * g_dry_calc) + ((Df - Dw) * (g_sat_calc - gamma_w_calc))
-  gamma_eff = g_sat_calc - gamma_w_calc
-elif Df < Dw <= (Df + B_eff):
-  q = Df * g_dry_calc
-  gamma_eff = (g_sat_calc - gamma_w_calc) + ((Dw - Df) / B_eff) * (
-      g_dry_calc - (g_sat_calc - gamma_w_calc)
+  c1, c2 = st.columns(2)
+  cx = c1.number_input(
+      f"Column cx ({'m' if not is_imperial else 'ft'})",
+      0.1,
+      5.0,
+      0.4 if not is_imperial else 1.25,
   )
-else:
-  q = Df * g_dry_calc
-  gamma_eff = g_dry_calc
+  cy = c2.number_input(
+      f"Column cy ({'m' if not is_imperial else 'ft'})",
+      0.1,
+      5.0,
+      0.4 if not is_imperial else 1.25,
+  )
+  h_foot = st.number_input(
+      f"Thickness h ({'m' if not is_imperial else 'ft'})",
+      0.1,
+      5.0,
+      0.45 if not is_imperial else 1.5,
+  )
 
-rad_phi = np.radians(phi)
-
-if method == "Terzaghi Method":
-  if phi > 0:
-    a = np.exp((0.75 * np.pi - rad_phi / 2) * np.tan(rad_phi))
-    Nq = (a**2) / (2 * (np.cos(np.radians(45 + phi / 2))) ** 2)
-    Nc = (Nq - 1) / np.tan(rad_phi)
-    Kp_terzaghi = (np.tan(np.radians(45 + phi / 2))) ** 2
-    Ng = (np.tan(rad_phi) / 2) * (Kp_terzaghi / (np.cos(rad_phi)) ** 2 - 1)
-  else:
-    Nc, Nq, Ng = 5.7, 1.0, 0.0
-
-  sc, sg = (1.3, 0.8) if footing_shape == "Square" else (1.0, 1.0)
-  sq = 1.0
-  q_ult = (c * Nc * sc) + (q * Nq) + (0.5 * gamma_eff * B_eff * Ng * sg)
-
-else:
-  if phi > 0:
-    Nq = (
-        np.exp(np.pi * np.tan(rad_phi))
-        * (np.tan(np.radians(45 + phi / 2))) ** 2
-    )
-    Nc = (Nq - 1) / np.tan(rad_phi)
-  else:
-    Nq, Nc = 1.0, 5.14
-
-  if method == "Hansen Method":
-    Ng = 1.5 * (Nq - 1) * np.tan(rad_phi) if phi > 0 else 0.0
-    sc = (
-        1 + (Nq / Nc) * (B_eff / L_eff)
-        if phi > 0
-        else 1 + 0.2 * (B_eff / L_eff)
-    )
-    sq = 1 + (B_eff / L_eff) * np.tan(rad_phi)
-    sg = 1 - 0.4 * (B_eff / L_eff)
-  elif method == "Meyerhof Method":
-    Ng = (Nq - 1) * np.tan(1.4 * rad_phi) if phi > 0 else 0.0
-    Kp = (np.tan(np.radians(45 + phi / 2))) ** 2
-    sc = 1 + 0.2 * Kp * (B_eff / L_eff)
-    sq = 1 + 0.1 * Kp * (B_eff / L_eff) if phi > 10 else 1.0
-    sg = sq
-  elif method == "Vesić Method":
-    Ng = 2 * (Nq + 1) * np.tan(rad_phi) if phi > 0 else 0.0
-    sc = 1 + (Nq / Nc) * (B_eff / L_eff)
-    sq = 1 + (B_eff / L_eff) * np.tan(rad_phi)
-    sg = 1 - 0.4 * (B_eff / L_eff)
-
-  q_ult = (c * Nc * sc) + (q * Nq * sq) + (0.5 * gamma_eff * B_eff * Ng * sg)
-
-q_allow = q_ult / FS
-
-# --- Structural Calculation Engine (ACI 318) ---
-is_imperial = "FPS" in unit_system
-cover = 0.075 if not is_imperial else (3.0 / 12.0)  # 75mm or 3 inches
-d_eff = max(0.01, h_foot - cover)
-
-# Load Conversion (Estimated Factored Ultimate Load Pu)
-# Factored soil pressure qu = 1.5 * q_allow
-qu_factored = 1.5 * q_allow
-Pu_factored = qu_factored * B * L
-
-# Size Effect Factor (λs) for ACI 318-19 & ACI 318-22
-if aci_version in ["ACI 318-19", "ACI 318-22"]:
+  # Rebar Selection Options
   if not is_imperial:
-    d_mm = d_eff * 1000
-    lambda_s = min(1.0, np.sqrt(2 / (1 + 0.004 * d_mm)))
+    rebar_options = {
+        "12mm": (12, 113.1),
+        "16mm": (16, 201.1),
+        "20mm": (20, 314.2),
+        "25mm": (25, 490.9),
+    }
   else:
-    d_in = d_eff * 12
-    lambda_s = min(1.0, np.sqrt(2 / (1 + 0.004 * d_in)))
-else:
-  lambda_s = 1.0  # ACI 318-05 to ACI 318-14 do not have size effect factor
-
-# 1. Two-Way Punching Shear
-bo = 2 * ((cx + d_eff) + (cy + d_eff))
-Area_inside_bo = (cx + d_eff) * (cy + d_eff)
-Vu_punch = qu_factored * (B * L - Area_inside_bo)
-
-beta_c = max(cx, cy) / min(cx, cy)
-alpha_s = 40  # Interior column
-
-phi_shear = 0.75
-
-if not is_imperial:
-  # Metric Calculations (fc in MPa, dimensions in mm/m)
-  vc1 = 0.17 * (1 + 2 / beta_c) * np.sqrt(fc) * lambda_s
-  vc2 = 0.083 * (alpha_s * (d_eff * 1000) / (bo * 1000) + 2) * np.sqrt(fc) * lambda_s
-  vc3 = 0.33 * np.sqrt(fc) * lambda_s
-  vc_punch = min(vc1, vc2, vc3)  # N/mm² = MPa
-  Phi_Vc_punch = (
-      phi_shear * vc_punch * (bo * 1000) * (d_eff * 1000)
-  ) / 1000.0  # kN (or tons)
-
-  # 2. One-Way Beam Shear
-  crit_dist = (B / 2) - (cx / 2) - d_eff
-  Vu_oneway = qu_factored * L * max(0.0, crit_dist)
-  vc_oneway = 0.17 * lambda_s * np.sqrt(fc)
-  Phi_Vc_oneway = (
-      phi_shear * vc_oneway * (L * 1000) * (d_eff * 1000)
-  ) / 1000.0
-
-  # 3. Flexural Design
-  cantilever_L = (B - cx) / 2
-  Mu = (qu_factored * L * (cantilever_L**2)) / 2  # kNm
-  phi_flex = 0.90
-  Rn = (Mu * 1e6) / (phi_flex * (L * 1000) * ((d_eff * 1000) ** 2))
-  rho = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn) / (0.85 * fc))))
-  rho_min = 0.0018
-  rho_req = max(rho, rho_min)
-  As_req = rho_req * (L * 1000) * (d_eff * 1000)  # mm²
-  if unit_system == "Metric Ton System (m, ton, t/m²)":
-    As_req = As_req / 100.0  # cm²
-
-else:
-  # Imperial Calculations (fc in psi, dimensions in inches/ft)
-  d_in = d_eff * 12
-  bo_in = bo * 12
-  L_in = L * 12
-
-  vc1 = 2 * (1 + 2 / beta_c) * np.sqrt(fc) * lambda_s
-  vc2 = (alpha_s * d_in / bo_in + 2) * np.sqrt(fc) * lambda_s
-  vc3 = 4 * np.sqrt(fc) * lambda_s
-  vc_punch = min(vc1, vc2, vc3)  # psi
-  Phi_Vc_punch = (phi_shear * vc_punch * bo_in * d_in) / 1000.0  # kips/tons
-
-  crit_dist = (B / 2) - (cx / 2) - d_eff
-  Vu_oneway = qu_factored * L * max(0.0, crit_dist)
-  vc_oneway = 2 * lambda_s * np.sqrt(fc)
-  Phi_Vc_oneway = (phi_shear * vc_oneway * L_in * d_in) / 1000.0
-
-  cantilever_L = (B - cx) / 2
-  Mu = (qu_factored * L * (cantilever_L**2)) / 2  # kips-ft
-  phi_flex = 0.90
-  Rn = (Mu * 12000) / (phi_flex * L_in * (d_in**2))
-  rho = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn) / (0.85 * fc))))
-  rho_min = 0.0018
-  rho_req = max(rho, rho_min)
-  As_req = rho_req * L_in * d_in  # in²
-
-# --- Results UI ---
-with col_res:
-  st.header("📊 Results Summary")
-  st.subheader("Geotechnical Bearing Capacity")
-  m1, m2 = st.columns(2)
-  m1.metric(f"Effective Width (B')", f"{B_eff:.2f} {u_len}")
-  m2.metric(f"Effective Surcharge (q)", f"{q:.2f} {u_stress}")
-
-  m3, m4 = st.columns(2)
-  m3.metric(f"Ultimate Capacity (q_ult)", f"{q_ult:.2f} {u_stress}")
-  m4.metric(f"Allowable Capacity (q_allow)", f"{q_allow:.2f} {u_stress}")
+    rebar_options = {
+        "#4 (0.5in)": (0.5, 0.20),
+        "#5 (0.625in)": (0.625, 0.31),
+        "#6 (0.75in)": (0.75, 0.44),
+        "#7 (0.875in)": (0.875, 0.60),
+        "#8 (1.0in)": (1.0, 0.79),
+    }
+  selected_rebar = st.selectbox("Select Reinforcement Bar Size", list(rebar_options.keys()))
 
   st.markdown("---")
-  st.subheader(f"Structural Verification ({aci_version})")
+  # CALCULATE BUTTON
+  calc_trigger = st.button("🚀 Calculate Design", type="primary", use_container_width=True)
 
-  s1, s2, s3 = st.columns(3)
-  punch_pass = Phi_Vc_punch >= Vu_punch
-  s1.metric(
-      "Punching Shear",
-      f"{Vu_punch:.1f} / {Phi_Vc_punch:.1f}",
-      delta="✅ PASS" if punch_pass else "❌ FAIL",
-  )
+# --- Perform Calculations Only When Button Is Pressed ---
+if calc_trigger or "calculated" in st.session_state:
+  st.session_state["calculated"] = True
 
-  oneway_pass = Phi_Vc_oneway >= Vu_oneway
-  s2.metric(
-      "One-Way Shear",
-      f"{Vu_oneway:.1f} / {Phi_Vc_oneway:.1f}",
-      delta="✅ PASS" if oneway_pass else "❌ FAIL",
-  )
+  # 1. Geotechnical Engine
+  gamma_w = 9.81 if not is_imperial else 62.4
+  if Dw <= Df:
+    q_surcharge = (Dw * gamma_dry) + ((Df - Dw) * (gamma_sat - gamma_w))
+    gamma_eff = gamma_sat - gamma_w
+  else:
+    q_surcharge = Df * gamma_dry
+    gamma_eff = gamma_dry
 
-  s3.metric("Req. Steel (As)", f"{As_req:.2f} {u_area}")
-
-
-# --- PDF Generator WITH GEOTECHNICAL & STRUCTURAL CALCULATIONS ---
-def generate_pdf():
-  buffer = io.BytesIO()
-  doc = SimpleDocTemplate(
-      buffer,
-      pagesize=letter,
-      rightMargin=36,
-      leftMargin=36,
-      topMargin=36,
-      bottomMargin=36,
-  )
-  story = []
-  styles = getSampleStyleSheet()
-
-  title_style = ParagraphStyle(
-      "Title",
-      parent=styles["Heading1"],
-      fontSize=15,
-      textColor=colors.HexColor("#1E3A8A"),
-      spaceAfter=10,
-  )
-  h2_style = ParagraphStyle(
-      "H2",
-      parent=styles["Heading2"],
-      fontSize=11,
-      textColor=colors.HexColor("#2563EB"),
-      spaceBefore=8,
-      spaceAfter=4,
-  )
-  body_style = ParagraphStyle(
-      "Body", parent=styles["Normal"], fontSize=8.5, leading=12
-  )
-
-  story.append(
-      Paragraph(
-          "<b>Geotechnical & Structural Design Report</b>",
-          title_style,
+  if geo_input_mode == "SPT N-value (IBC Method)":
+    # IBC Table 1806.2 Empirical Approximation
+    q_allow = N_spt * 12.5 if not is_imperial else N_spt * 0.25  # kPa or ksf
+    q_ult = q_allow * FS
+    Nc = Nq = Ng = 0.0
+  else:
+    rad_phi = np.radians(phi_val)
+    if method == "Terzaghi Method":
+      if phi_val > 0:
+        a = np.exp((0.75 * np.pi - rad_phi / 2) * np.tan(rad_phi))
+        Nq = (a**2) / (2 * (np.cos(np.radians(45 + phi_val / 2))) ** 2)
+        Nc = (Nq - 1) / np.tan(rad_phi)
+        Kp = (np.tan(np.radians(45 + phi_val / 2))) ** 2
+        Ng = (np.tan(rad_phi) / 2) * (Kp / (np.cos(rad_phi)) ** 2 - 1)
+      else:
+        Nc, Nq, Ng = 5.7, 1.0, 0.0
+      q_ult = (
+          (1.3 * c_val * Nc)
+          + (q_surcharge * Nq)
+          + (0.4 * gamma_eff * B * Ng)
       )
-  )
-  story.append(Spacer(1, 4))
-
-  # Input Summary Table
-  story.append(Paragraph("<b>1. Input Parameters</b>", h2_style))
-  input_data = [
-      ["Parameter", "Value", "Unit", "Parameter", "Value", "Unit"],
-      ["Geo Method", method, "-", "Unit System", unit_system.split()[0], "-"],
-      ["ACI Standard", aci_version, "-", "Factor of Safety", f"{FS:.1f}", "-"],
-      [
-          "Footing (B x L)",
-          f"{B:.2f} x {L:.2f}",
-          u_len,
-          "Thickness (h)",
-          f"{h_foot:.2f}",
-          u_len,
-      ],
-      [
-          "Cohesion (c)",
-          f"{c:.2f}",
-          u_stress,
-          "Friction Angle",
-          f"{phi:.1f}",
-          "deg",
-      ],
-      [
-          "f'c Strength",
-          f"{fc:.1f}",
-          u_fc,
-          "fy Steel Yield",
-          f"{fy:.1f}",
-          u_fc,
-      ],
-  ]
-  t_input = Table(input_data, colWidths=[110, 65, 45, 110, 65, 45])
-  t_input.setStyle(TableStyle([
-      ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E5E7EB")),
-      ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
-      ("FONTSIZE", (0, 0), (-1, -1), 8),
-  ]))
-  story.append(t_input)
-
-  # Step-by-Step Geotechnical Breakdown
-  story.append(
-      Paragraph("<b>2. Geotechnical Calculation Procedure</b>", h2_style)
-  )
-  geo_steps = [
-      f"• Effective Footing Dimensions: B' = <b>{B_eff:.2f} {u_len}</b>, L' ="
-      f" <b>{L_eff:.2f} {u_len}</b><br/>• Effective Surcharge (q) ="
-      f" <b>{q:.3f} {u_stress}</b>, Effective Unit Weight (γ_eff) ="
-      f" <b>{gamma_eff:.4f} {u_gamma}</b><br/>• Bearing Capacity Factors: Nc ="
-      f" <b>{Nc:.3f}</b>, Nq = <b>{Nq:.3f}</b>, Nγ = <b>{Ng:.3f}</b><br/>•"
-      " Ultimate Capacity (q_ult) = <b>{q_ult:.2f} {u_stress}</b> | Allowable"
-      f" Capacity (q_allow) = <b>{q_allow:.2f} {u_stress}</b>"
-  ]
-  for step in geo_steps:
-    story.append(Paragraph(step, body_style))
-    story.append(Spacer(1, 4))
-
-  # Step-by-Step Structural Breakdown
-  story.append(
-      Paragraph(
-          f"<b>3. Structural Design Breakdown ({aci_version})</b>", h2_style
+    else:
+      Nq = (
+          np.exp(np.pi * np.tan(rad_phi))
+          * (np.tan(np.radians(45 + phi_val / 2))) ** 2
+          if phi_val > 0
+          else 1.0
       )
+      Nc = (Nq - 1) / np.tan(rad_phi) if phi_val > 0 else 5.14
+      Ng = 2 * (Nq + 1) * np.tan(rad_phi) if phi_val > 0 else 0.0
+      q_ult = (c_val * Nc) + (q_surcharge * Nq) + (0.5 * gamma_eff * B * Ng)
+    q_allow = q_ult / FS
+
+  # 2. Structural Engine (ACI 318)
+  cover = 0.075 if not is_imperial else (3.0 / 12.0)
+  d_eff = h_foot - cover
+
+  qu_factored = 1.5 * q_allow
+  Pu = qu_factored * B * L
+
+  # Size Effect Factor λs (ACI 318-19/22)
+  if aci_version in ["ACI 318-19", "ACI 318-22"]:
+    d_metric = d_eff * 1000 if not is_imperial else d_eff * 12 * 25.4
+    lambda_s = min(1.0, np.sqrt(2 / (1 + 0.004 * d_metric)))
+  else:
+    lambda_s = 1.0
+
+  # Punching Shear Check
+  bo = 2 * ((cx + d_eff) + (cy + d_eff))
+  Area_bo = (cx + d_eff) * (cy + d_eff)
+  Vu_punch = qu_factored * (B * L - Area_bo)
+
+  phi_s = 0.75
+  if not is_imperial:
+    vc_punch = 0.33 * lambda_s * np.sqrt(fc)  # MPa
+    Phi_Vc_punch = (phi_s * vc_punch * (bo * 1000) * (d_eff * 1000)) / 1000.0
+  else:
+    vc_punch = 4.0 * lambda_s * np.sqrt(fc)  # psi
+    Phi_Vc_punch = (phi_s * vc_punch * (bo * 12) * (d_eff * 12)) / 1000.0
+
+  # One-Way Beam Shear
+  crit_dist = (B / 2) - (cx / 2) - d_eff
+  Vu_oneway = qu_factored * L * max(0.0, crit_dist)
+  if not is_imperial:
+    vc_oneway = 0.17 * lambda_s * np.sqrt(fc)
+    Phi_Vc_oneway = (phi_s * vc_oneway * (L * 1000) * (d_eff * 1000)) / 1000.0
+  else:
+    vc_oneway = 2.0 * lambda_s * np.sqrt(fc)
+    Phi_Vc_oneway = (phi_s * vc_oneway * (L * 12) * (d_eff * 12)) / 1000.0
+
+  # Bending Moment & Steel Calculation
+  cantilever = (B - cx) / 2
+  Mu = (qu_factored * L * (cantilever**2)) / 2
+
+  if not is_imperial:
+    L_mm, d_mm = L * 1000, d_eff * 1000
+    Rn = (Mu * 1e6) / (0.9 * L_mm * (d_mm**2))
+    rho = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn) / (0.85 * fc))))
+    rho_req = max(rho, 0.0018)
+    As_req = rho_req * L_mm * d_mm  # mm²
+    bar_dia, bar_area = rebar_options[selected_rebar]
+    num_bars = int(np.ceil(As_req / bar_area))
+    spacing = int(((L_mm - 150) / max(1, (num_bars - 1))))
+  else:
+    L_in, d_in = L * 12, d_eff * 12
+    Rn = (Mu * 12000) / (0.9 * L_in * (d_in**2))
+    rho = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn) / (0.85 * fc))))
+    rho_req = max(rho, 0.0018)
+    As_req = rho_req * L_in * d_in  # in²
+    bar_dia, bar_area = rebar_options[selected_rebar]
+    num_bars = int(np.ceil(As_req / bar_area))
+    spacing = round(((L_in - 6) / max(1, (num_bars - 1))), 2)
+
+  # --- Matplotlib Section Diagram Function ---
+  def draw_section_diagram():
+    fig, ax = plt.subplots(figsize=(6, 3.5))
+
+    # Draw Soil & Ground Level
+    ax.fill_between([-B / 2 - 0.5, B / 2 + 0.5], [0, 0], [-Df - h_foot - 0.2, -Df - h_foot - 0.2], color="#E5D3B3", alpha=0.5, label="Soil Mass")
+    ax.plot([-B / 2 - 0.5, B / 2 + 0.5], [-Df, -Df], "k--", linewidth=1, label="Ground Level (GL)")
+
+    # Draw Concrete Footing
+    ax.add_patch(plt.Rectangle((-B / 2, -Df - h_foot), B, h_foot, facecolor="#A3A3A3", edgecolor="black", linewidth=1.5, label="Concrete Footing"))
+
+    # Draw Column
+    ax.add_patch(plt.Rectangle((-cx / 2, -Df), cx, Df + 0.3, facecolor="#737373", edgecolor="black", linewidth=1.5, label="RCC Column"))
+
+    # Draw Rebar (Bottom Reinforcement Layer)
+    rebar_y = -Df - h_foot + cover
+    ax.plot([-B / 2 + cover, B / 2 - cover], [rebar_y, rebar_y], color="red", linewidth=3, label=f"Main Rebars: {num_bars}-{selected_rebar}")
+
+    # Draw Points for Cross Rebars
+    x_rebars = np.linspace(-B / 2 + cover, B / 2 - cover, min(num_bars, 8))
+    ax.scatter(x_rebars, [rebar_y + 0.03] * len(x_rebars), color="darkred", s=25, zorder=5, label="Distribution Bars")
+
+    # Formatting Plot
+    ax.set_xlim(-B / 2 - 0.6, B / 2 + 0.6)
+    ax.set_ylim(-Df - h_foot - 0.3, 0.4)
+    ax.set_aspect("equal")
+    ax.axis("off")
+    ax.legend(loc="upper right", fontsize=6, framealpha=0.9)
+    plt.title(f"Footing Structural Section Elevation ({B}m x {L}m)", fontsize=9, fontweight="bold")
+    plt.tight_layout()
+
+    buf = io.BytesIO()
+    plt.savefig(buf, format="png", dpi=200)
+    buf.seek(0)
+    plt.close()
+    return buf
+
+  # Display Results in UI Right Column
+  with col_res:
+    st.header("📊 Detailed Design Results")
+
+    st.subheader("1. Capacity & Structural Summary")
+    r1, r2 = st.columns(2)
+    r1.metric("Allowable Bearing Capacity", f"{q_allow:.2f} {'kPa' if not is_imperial else 'ksf'}")
+    r2.metric("Factored Ultimate Load (Pu)", f"{Pu:.1f} {'kN' if not is_imperial else 'kips'}")
+
+    r3, r4 = st.columns(2)
+    p_status = "✅ PASS" if Phi_Vc_punch >= Vu_punch else "❌ FAIL"
+    r3.metric("Punching Shear Check", f"{Vu_punch:.1f} / {Phi_Vc_punch:.1f}", delta=p_status)
+    w_status = "✅ PASS" if Phi_Vc_oneway >= Vu_oneway else "❌ FAIL"
+    r4.metric("One-Way Shear Check", f"{Vu_oneway:.1f} / {Phi_Vc_oneway:.1f}", delta=w_status)
+
+    st.subheader("2. Reinforcement Recommendation")
+    st.info(f"<b>Required Area (As):</b> {As_req:.2f} {'mm²' if not is_imperial else 'in²'}<br/>"
+            f"<b>Provide:</b> Use <b>{num_bars} Nos - {selected_rebar}</b> bars @ <b>{spacing} {'mm' if not is_imperial else 'in'} c/c</b> (Both Directions)", unsafe_allow_html=True)
+
+    st.subheader("3. Cross-Section Elevation View")
+    fig_buf = draw_section_diagram()
+    st.image(fig_buf)
+
+  # --- Step-by-Step PDF Generation ---
+  def generate_pdf():
+    pdf_buffer = io.BytesIO()
+    doc = SimpleDocTemplate(pdf_buffer, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+    story = []
+    styles = getSampleStyleSheet()
+
+    title_style = ParagraphStyle("T", parent=styles["Heading1"], fontSize=14, textColor=colors.HexColor("#1E3A8A"), spaceAfter=8)
+    h2_style = ParagraphStyle("H2", parent=styles["Heading2"], fontSize=10, textColor=colors.HexColor("#2563EB"), spaceBefore=6, spaceAfter=4)
+    body_style = ParagraphStyle("B", parent=styles["Normal"], fontSize=8, leading=11)
+
+    story.append(Paragraph("<b>Geotechnical & Structural Footing Design Calculation</b>", title_style))
+
+    # Inputs Table
+    story.append(Paragraph("<b>1. Design Inputs & Selected Codes</b>", h2_style))
+    input_data = [
+        ["Parameter", "Value", "Unit", "Parameter", "Value", "Unit"],
+        ["Geo Method", method, "-", "Code Standard", aci_version, "-"],
+        ["Footing B x L", f"{B} x {L}", "m/ft", "Thickness (h)", f"{h_foot}", "m/ft"],
+        ["Column cx x cy", f"{cx} x {cy}", "m/ft", "SPT N-value", f"{N_spt if N_spt else 'N/A'}", "-"],
+        ["f'c Concrete", f"{fc}", "MPa/psi", "fy Steel", f"{fy}", "MPa/psi"],
+    ]
+    t_in = Table(input_data, colWidths=[100, 70, 40, 100, 70, 40])
+    t_in.setStyle(TableStyle([
+        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#F3F4F6")),
+        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
+        ("FONTSIZE", (0, 0), (-1, -1), 7.5),
+    ]))
+    story.append(t_in)
+
+    # Detailed Step-by-Step Breakdown
+    story.append(Paragraph("<b>2. Step-by-step Calculation Procedure</b>", h2_style))
+    steps_text = [
+        f"<b>Step 1: Geotechnical Capacity Check ({method})</b><br/>"
+        f"• Surcharge overburden load (q) = {q_surcharge:.2f} | Effective γ = {gamma_eff:.2f}<br/>"
+        f"• Ultimate Capacity (q_ult) = {q_ult:.2f} | Allowable Capacity (q_allow) = {q_allow:.2f}",
+
+        f"<b>Step 2: Factored Soil Pressure & Design Shears (ACI 318)</b><br/>"
+        f"• Factored Pressure qu = 1.5 × q_allow = {qu_factored:.2f}<br/>"
+        f"• Effective depth (d) = {d_eff:.3f} | Size effect factor (λs) = {lambda_s:.3f}<br/>"
+        f"• Punching Shear: Vu = {Vu_punch:.1f} vs ϕVc = {Phi_Vc_punch:.1f} → <b>{'PASS' if Phi_Vc_punch>=Vu_punch else 'FAIL'}</b><br/>"
+        f"• One-Way Shear: Vu = {Vu_oneway:.1f} vs ϕVc = {Phi_Vc_oneway:.1f} → <b>{'PASS' if Phi_Vc_oneway>=Vu_oneway else 'FAIL'}</b>",
+
+        f"<b>Step 3: Flexural Reinforcement Design & Bar Selection</b><br/>"
+        f"• Critical Cantilever Moment (Mu) = {Mu:.2f}<br/>"
+        f"• Required Steel Area (As) = {As_req:.2f} {'mm²' if not is_imperial else 'in²'}<br/>"
+        f"• <b>Provided Rebar Setup: Use {num_bars} Nos - {selected_rebar} bars @ {spacing} {'mm' if not is_imperial else 'in'} c/c</b>"
+    ]
+    for step in steps_text:
+      story.append(Paragraph(step, body_style))
+      story.append(Spacer(1, 4))
+
+    # Add Diagram to PDF
+    story.append(Paragraph("<b>3. Structural Footing Section Elevation</b>", h2_style))
+    img_buf = draw_section_diagram()
+    story.append(Image(img_buf, width=380, height=220))
+
+    doc.build(story)
+    pdf_buffer.seek(0)
+    return pdf_buffer
+
+  st.markdown("---")
+  st.download_button(
+      label="📥 Download Detailed Design Report with Section Diagram (PDF)",
+      data=generate_pdf(),
+      file_name="Footing_Design_Detailed_Report.pdf",
+      mime="application/pdf",
+      use_container_width=True,
   )
-  struct_steps = [
-      f"• Effective Depth (d) = <b>{d_eff:.3f} {u_len}</b> | Size Effect Factor"
-      f" (λs) = <b>{lambda_s:.3f}</b><br/>• Factored Soil Pressure (qu) ="
-      f" 1.5 × q_allow = <b>{qu_factored:.2f} {u_stress}</b><br/>•"
-      f" <b>Two-Way Punching Shear:</b> Vu = <b>{Vu_punch:.1f}</b> | ϕVc ="
-      f" <b>{Phi_Vc_punch:.1f}</b> -> <b>{'PASS' if punch_pass else 'FAIL'}</b><br/>•"
-      f" <b>One-Way Beam Shear:</b> Vu = <b>{Vu_oneway:.1f}</b> | ϕVc ="
-      f" <b>{Phi_Vc_oneway:.1f}</b> ->"
-      f" <b>{'PASS' if oneway_pass else 'FAIL'}</b><br/>• <b>Flexural"
-      f" Reinforcement:</b> Ultimate Moment (Mu) = <b>{Mu:.2f}</b> | Req."
-      f" Steel Area (As) = <b>{As_req:.2f} {u_area}</b>"
-  ]
-  for step in struct_steps:
-    story.append(Paragraph(step, body_style))
-    story.append(Spacer(1, 4))
-
-  # Final Summary Table
-  story.append(Paragraph("<b>4. Summary Checklist</b>", h2_style))
-  summary_data = [
-      ["Check / Parameter", "Value / Capacity", "Status"],
-      ["Allowable Bearing Capacity", f"{q_allow:.2f} {u_stress}", "OK"],
-      [
-          "Punching Shear Check",
-          f"Vu: {Vu_punch:.1f} ≤ ϕVc: {Phi_Vc_punch:.1f}",
-          "PASS" if punch_pass else "FAIL",
-      ],
-      [
-          "One-Way Shear Check",
-          f"Vu: {Vu_oneway:.1f} ≤ ϕVc: {Phi_Vc_oneway:.1f}",
-          "PASS" if oneway_pass else "FAIL",
-      ],
-      ["Flexural Reinforcement Area", f"{As_req:.2f} {u_area}", "DESIGNED"],
-  ]
-  t_summary = Table(summary_data, colWidths=[180, 180, 80])
-  t_summary.setStyle(TableStyle([
-      ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#2563EB")),
-      ("TEXTCOLOR", (0, 0), (-1, 0), colors.whitesmoke),
-      ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
-      ("BACKGROUND", (0, 1), (-1, -1), colors.HexColor("#F9FAFB")),
-  ]))
-  story.append(t_summary)
-
-  doc.build(story)
-  buffer.seek(0)
-  return buffer
-
-
-st.markdown("---")
-st.download_button(
-    label=(
-        "📥 Download Complete Report with Geotechnical & Structural Design"
-        " (PDF)"
-    ),
-    data=generate_pdf(),
-    file_name=f"footing_design_{aci_version.replace(' ', '_')}.pdf",
-    mime="application/pdf",
-)
