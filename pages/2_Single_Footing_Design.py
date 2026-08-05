@@ -128,17 +128,20 @@ with col_in:
 
     rebar_system = st.radio("Rebar Unit System Standard", ["Metric Sizes (mm)", "Imperial Sizes (# / in)"])
 
+    # --- Updated Rebar Dictionary with 22 mm Added ---
     if "Metric" in rebar_system:
         rebar_options = {
             "16 mm": {"dia": 16.0, "area": 201.06, "is_metric": True},
             "18 mm": {"dia": 18.0, "area": 254.47, "is_metric": True},
             "20 mm": {"dia": 20.0, "area": 314.16, "is_metric": True},
+            "22 mm": {"dia": 22.0, "area": 380.13, "is_metric": True},  # <--- Added 22 mm
             "25 mm": {"dia": 25.0, "area": 490.87, "is_metric": True},
         }
     else:
         rebar_options = {
             "#5 (0.625in)": {"dia": 0.625, "area": 0.31, "is_metric": False},
             "#6 (0.75in)": {"dia": 0.75, "area": 0.44, "is_metric": False},
+            "#7 (0.875in)": {"dia": 0.875, "area": 0.60, "is_metric": False},
             "#8 (1.0in)": {"dia": 1.0, "area": 0.79, "is_metric": False},
         }
 
@@ -290,7 +293,7 @@ if calc_trigger or "calculated" in st.session_state:
             total_span = width_len * 12
             clear_c = 3.0
 
-        As_disp = As_req if is_selected_metric else As_req
+        As_disp = As_req
         n_bars = int(np.ceil(As_disp / actual_area))
         n_bars = max(2, n_bars)
         sp = round((total_span - (2 * clear_c)) / max(1, (n_bars - 1)), 1)
@@ -301,7 +304,7 @@ if calc_trigger or "calculated" in st.session_state:
 
     spacing_unit = "mm" if is_selected_metric else "in"
 
-    # --- Drawing Logic (Enhanced Plan View + Water Table Section) ---
+    # --- Drawing Logic ---
     def draw_cross_section():
         fig, ax = plt.subplots(figsize=(6.5, 4.5))
         f_bottom = -Df - h_foot
@@ -346,7 +349,7 @@ if calc_trigger or "calculated" in st.session_state:
         ax.set_aspect("equal")
         ax.axis("off")
         ax.legend(loc="upper right", fontsize=6.0)
-        plt.title(f"Elevation Section with Water Table ({hook_type})", fontsize=9, fontweight="bold")
+        plt.title(f"Footing Elevation Section (90-Degree Standard Hook)", fontsize=9, fontweight="bold")
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -381,17 +384,13 @@ if calc_trigger or "calculated" in st.session_state:
             col_x_min = ex_input - (cx / 2.0)
             col_y_min = ey_input - (cy / 2.0)
             ax.add_patch(patches.Rectangle((col_x_min, col_y_min), cx, cy, facecolor="#374151", edgecolor="black", linewidth=1.5, zorder=6))
-            ax.text(ex_input, ey_input, f"{cx:.2f}x{cy:.2f}", color="white", ha="center", va="center", fontsize=7, fontweight="bold", zorder=7)
-
-        # Dimensions Notation
-        ax.annotate(f"B = {B:.2f} {u_len}", xy=(0, -L / 2), xytext=(0, -L / 2 - 0.4), ha="center", arrowprops=dict(arrowstyle="<->", lw=1))
-        ax.annotate(f"L = {L:.2f} {u_len}", xy=(-B / 2, 0), xytext=(-B / 2 - 0.4, 0), va="center", rotation=90, arrowprops=dict(arrowstyle="<->", lw=1))
+            ax.text(ex_input, ey_input, f"cx={cx:.2f}ft\ncy={cy:.2f}ft", color="white", ha="center", va="center", fontsize=7, fontweight="bold", zorder=7)
 
         ax.set_xlim(-B / 2 - 0.8, B / 2 + 0.8)
         ax.set_ylim(-L / 2 - 0.8, L / 2 + 0.8)
         ax.set_aspect("equal")
         ax.axis("off")
-        plt.title(f"Footing Plan Top View\nx-dir: {num_bars_x} Nos (Red) | y-dir: {num_bars_y} Nos (Blue)", fontsize=9, fontweight="bold")
+        plt.title(f"Footing Structural Top Plan View (Cover = 3 in)", fontsize=9, fontweight="bold")
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -400,60 +399,60 @@ if calc_trigger or "calculated" in st.session_state:
         plt.close()
         return buf
 
-    # --- PDF Report Generator Function ---
+    # --- PDF Report Generator ---
     def generate_pdf_report(sec_buf, plan_buf):
         pdf_buf = io.BytesIO()
         doc = SimpleDocTemplate(pdf_buf, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
         styles = getSampleStyleSheet()
 
-        title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=16, leading=20, textColor=colors.HexColor("#1E3A8A"))
-        h2_style = ParagraphStyle('H2Style', parent=styles['Heading2'], fontSize=12, leading=16, textColor=colors.HexColor("#1F2937"))
-        normal_style = styles['Normal']
+        title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=14, leading=18, textColor=colors.HexColor("#000000"), alignment=1)
+        sub_title_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=8, leading=11, textColor=colors.HexColor("#000000"), alignment=1)
+        h2_style = ParagraphStyle('H2Style', parent=styles['Heading2'], fontSize=10, leading=14, textColor=colors.HexColor("#000000"))
+        normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=8, leading=11, textColor=colors.HexColor("#000000"))
 
         story = []
-        story.append(Paragraph("<b>SINGLE FOOTING DESIGN REPORT</b>", title_style))
+        story.append(Paragraph("<b>STRUCTURAL & GEOTECHNICAL FOOTING DESIGN CALCULATION REPORT</b>", title_style))
+        story.append(Paragraph(f"Code Standard: {aci_version} | Unit System: {unit_system} | Clear Cover: 3.0 in (75 mm)<br/>Reinforcement Hook Type: {hook_type}", sub_title_style))
         story.append(Spacer(1, 10))
 
-        # Project Parameters Summary Table
-        param_data = [
-            ["Parameter", "Value", "Parameter", "Value"],
-            ["Footing Size B x L", f"{B:.2f} x {L:.2f} {u_len}", "Concrete f'c", f"{fc} {u_fc}"],
-            ["Footing Thickness h", f"{h_foot:.2f} {u_len}", "Steel fy", f"{fy} {u_fc}"],
-            ["Unfactored P (DL+LL)", f"{P_unfactored:.2f} {u_force}", "q_allow (Gross)", f"{q_allow:.2f} {u_stress}"],
-            ["Factored Pu", f"{Pu:.2f} {u_force}", "Water Table Depth Dw", f"{Dw:.2f} {u_len}"],
-        ]
-        t = Table(param_data, colWidths=[130, 130, 130, 130])
-        t.setStyle(TableStyle([
-            ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor("#E5E7EB")),
-            ('TEXTCOLOR', (0, 0), (-1, 0), colors.black),
-            ('FONTNAME', (0, 0), (-1, 0), 'Helvetica-Bold'),
-            ('GRID', (0, 0), (-1, -1), 0.5, colors.grey),
-            ('FONTSIZE', (0, 0), (-1, -1), 8),
-        ]))
-        story.append(t)
-        story.append(Spacer(1, 12))
-
-        # Step-by-Step Calculation Detailed Section
-        story.append(Paragraph("<b>1. Geotechnical & Bearing Pressure Check (Unfactored)</b>", h2_style))
-        p_check_str = f"• Max Service Soil Pressure (q_max): <b>{q_max_service:.2f} {u_stress}</b> vs Allowable (q_allow): <b>{q_allow:.2f} {u_stress}</b> --> " + ("<font color='green'><b>PASS (SAFE)</b></font>" if q_max_service <= q_allow else "<font color='red'><b>FAIL (OVERLOADED)</b></font>")
-        story.append(Paragraph(p_check_str, normal_style))
+        # 1. Column Loads & Eccentricity
+        story.append(Paragraph("<b>1. Column Loads & Eccentricity Calculations</b>", h2_style))
+        story.append(Paragraph(f"Axial Load (P) = {P_unfactored:.2f} {u_force} | Mx = {Mx_unfactored:.2f} {u_moment} | My = {My_unfactored:.2f} {u_moment}", normal_style))
+        story.append(Paragraph(f"Applied Column Eccentricity: e_x,input = {ex_input:.2f} {u_len} | e_y,input = {ey_input:.2f} {u_len}", normal_style))
+        story.append(Paragraph("<b>Step-by-step Eccentricity Derivation:</b>", normal_style))
+        story.append(Paragraph(f"M_x,total = M_x + (P × |e_y|) = {Mx_unfactored:.2f} + ({P_unfactored:.2f} × {abs(ey_input):.2f}) = {Mx_total:.2f} {u_moment}", normal_style))
+        story.append(Paragraph(f"M_y,total = M_y + (P × |e_x|) = {My_unfactored:.2f} + ({P_unfactored:.2f} × {abs(ex_input):.2f}) = {My_total:.2f} {u_moment}", normal_style))
+        story.append(Paragraph(f"e_x,total = M_y,total / P = {e_x_total:.4f} {u_len}", normal_style))
+        story.append(Paragraph(f"e_y,total = M_x,total / P = {e_y_total:.4f} {u_len}", normal_style))
         story.append(Spacer(1, 8))
 
-        story.append(Paragraph("<b>2. Structural Shear Checks (ACI 318)</b>", h2_style))
-        story.append(Paragraph(f"• Factored Soil Pressure (qu): <b>{qu_factored:.2f} {u_stress}</b>", normal_style))
-        story.append(Paragraph(f"• Punching Shear: Vu = <b>{Vu_punch:.1f}</b> vs φVc = <b>{Phi_Vc_punch:.1f} {u_force}</b> --> " + ("<font color='green'><b>PASS</b></font>" if Phi_Vc_punch >= Vu_punch else "<font color='red'><b>FAIL</b></font>"), normal_style))
-        story.append(Paragraph(f"• One-Way Shear: Vu = <b>{Vu_oneway:.1f}</b> vs φVc = <b>{Phi_Vc_oneway:.1f} {u_force}</b> --> " + ("<font color='green'><b>PASS</b></font>" if Phi_Vc_oneway >= Vu_oneway else "<font color='red'><b>FAIL</b></font>"), normal_style))
+        # 2. Geotechnical Bearing Capacity
+        story.append(Paragraph("<b>2. Geotechnical Bearing Capacity (Multi-Layer Engine)</b>", h2_style))
+        story.append(Paragraph(f"• Footing Dimensions: B = {B:.2f} {u_len}, L = {L:.2f} {u_len}, Df = {Df:.2f} {u_len}", normal_style))
+        story.append(Paragraph(f"B_eff = {B_eff:.3f} {u_len} | L_eff = {L_eff:.3f} {u_len}", normal_style))
+        story.append(Paragraph(f"q_ult = {q_ult:.2f} {u_stress} | q_allow = q_ult / FS = {q_allow:.2f} {u_stress}", normal_style))
+        story.append(Paragraph(f"q_max,service = P/A + 6Mx/(BL²) + 6My/(LB²) = <b>{q_max_service:.2f} {u_stress}</b> [{'PASS' if q_max_service <= q_allow else 'FAIL'}]", normal_style))
         story.append(Spacer(1, 8))
 
-        story.append(Paragraph("<b>3. Reinforcement Detailing Summary</b>", h2_style))
-        story.append(Paragraph(f"• <b>x-direction Rebar:</b> Provide <b>{num_bars_x} Nos - {selected_rebar}</b> @ <b>{spacing_x} {spacing_unit} c/c</b> ({hook_type})", normal_style))
-        story.append(Paragraph(f"• <b>y-direction Rebar:</b> Provide <b>{num_bars_y} Nos - {selected_rebar}</b> @ <b>{spacing_y} {spacing_unit} c/c</b> ({hook_type})", normal_style))
-        story.append(Spacer(1, 12))
+        # 3. Structural Shear Verification
+        story.append(Paragraph("<b>3. Structural Shear Verification (ACI 318)</b>", h2_style))
+        story.append(Paragraph(f"• Factored Load Pu = {Pu:.2f} {u_force}", normal_style))
+        story.append(Paragraph(f"• Factored Ultimate Pressure qu = {qu_factored:.2f} {u_stress}", normal_style))
+        story.append(Paragraph(f"• Effective Depth d_eff = h - cover = {d_eff:.3f} {u_len} | Size Effect λs = {lambda_s:.3f}", normal_style))
+        story.append(Paragraph(f"3.1 Two-Way Punching Shear Calculation:<br/>Vu,punch = {Vu_punch:.2f} {u_force} | φVc,punch = {Phi_Vc_punch:.2f} {u_force} [{'PASS' if Phi_Vc_punch >= Vu_punch else 'FAIL'}]", normal_style))
+        story.append(Paragraph(f"3.2 One-Way Beam Shear Calculation:<br/>Vu,oneway = {Vu_oneway:.2f} {u_force} | φVc,oneway = {Phi_Vc_oneway:.2f} {u_force} [{'PASS' if Phi_Vc_oneway >= Vu_oneway else 'FAIL'}]", normal_style))
+        story.append(Spacer(1, 8))
 
-        # Images Table
-        img_sec = RLImage(sec_buf, width=240, height=160)
-        img_plan = RLImage(plan_buf, width=240, height=160)
-        img_table = Table([[img_sec, img_plan]], colWidths=[260, 260])
+        # 4. Flexural Reinforcement Design
+        story.append(Paragraph("<b>4. Flexural Reinforcement Design</b>", h2_style))
+        story.append(Paragraph(f"FINAL SPECIFICATION: Provide <b>{num_bars_x} Nos - {selected_rebar}</b> with {hook_type} @ <b>{spacing_x} {spacing_unit} c/c</b> (Both Ways)", normal_style))
+        story.append(Spacer(1, 10))
+
+        # 5. Structural Detailing Drawings
+        story.append(Paragraph("<b>5. Structural Detailing Drawings</b>", h2_style))
+        img_sec = RLImage(sec_buf, width=230, height=150)
+        img_plan = RLImage(plan_buf, width=230, height=150)
+        img_table = Table([[img_sec, img_plan]], colWidths=[250, 250])
         story.append(img_table)
 
         doc.build(story)
@@ -480,13 +479,17 @@ if calc_trigger or "calculated" in st.session_state:
         st.markdown(f"• **x-direction Steel:** Provide **{num_bars_x} Nos - {selected_rebar}** @ **{spacing_x} {spacing_unit} c/c**")
         st.markdown(f"• **y-direction Steel:** Provide **{num_bars_y} Nos - {selected_rebar}** @ **{spacing_y} {spacing_unit} c/c**")
 
+        # Drawings Display First
+        st.subheader("4. Detailing Drawings")
+        st.image(sec_img, caption="Footing Elevation Section with Water Table")
+        st.image(plan_img, caption="Footing Plan Top View with Dimensions & Rebar Layout")
+
+        # Download PDF Button placed at the VERY BOTTOM after images
+        st.markdown("---")
         st.download_button(
-            label="📄 Download Detailed Step-by-Step PDF Report",
+            label="📄 Download Detailed Calculation PDF Report",
             data=pdf_file,
-            file_name="Single_Footing_Design_Report.pdf",
+            file_name="Detailed_Footing_Design_Report.pdf",
             mime="application/pdf",
             use_container_width=True
         )
-
-        st.image(sec_img, caption="Elevation Section with Water Table")
-        st.image(plan_img, caption="Plan Top View with Dimensions & Exact Rebar Qty")
