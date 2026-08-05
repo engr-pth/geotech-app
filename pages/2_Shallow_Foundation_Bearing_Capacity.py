@@ -65,8 +65,8 @@ with col_in:
       ],
   )
 
-  # --- New Section: Column Loading Inputs ---
-  st.header("2. Applied Column Loads")
+  # --- Applied Column Loads & Eccentricity Inputs ---
+  st.header("2. Applied Column Loads & Eccentricity")
   col_p, col_mx, col_my = st.columns(3)
   P_unfactored = col_p.number_input(
       f"Axial Load P ({u_force})", 0.0, 100000.0, 500.0 if not is_imperial else 100.0
@@ -76,6 +76,25 @@ with col_in:
   )
   My_unfactored = col_my.number_input(
       f"Moment My ({u_moment})", 0.0, 10000.0, 0.0
+  )
+
+  # Column Eccentricity Inputs
+  col_ex, col_ey = st.columns(2)
+  ex_input = col_ex.number_input(
+      f"Column Eccentricity ex ({u_len})",
+      -5.0,
+      5.0,
+      0.0,
+      step=0.05,
+      help="Footing ဗဟိုမှ X-direction သို့ Column ရွှေ့ဆိုင်းမှု",
+  )
+  ey_input = col_ey.number_input(
+      f"Column Eccentricity ey ({u_len})",
+      -5.0,
+      5.0,
+      0.0,
+      step=0.05,
+      help="Footing ဗဟိုမှ Y-direction သို့ Column ရွှေ့ဆိုင်းမှု",
   )
 
   st.header("3. Multi-Layer Soil Stratigraphy")
@@ -236,7 +255,16 @@ with col_in:
 if calc_trigger or "calculated" in st.session_state:
   st.session_state["calculated"] = True
 
-  # 1. Multi-Layer Surcharge Engine
+  # 1. Total Moment including Eccentricity Effects
+  # Total Moment = Applied Moment + (P * Eccentricity)
+  Mx_total = Mx_unfactored + (P_unfactored * abs(ey_input))
+  My_total = My_unfactored + (P_unfactored * abs(ex_input))
+
+  # Effective Eccentricities
+  e_x_total = My_total / P_unfactored if P_unfactored > 0 else 0.0
+  e_y_total = Mx_total / P_unfactored if P_unfactored > 0 else 0.0
+
+  # 2. Multi-Layer Surcharge Engine
   q_surcharge = 0.0
   current_depth = 0.0
   gamma_w = 62.4 if is_imperial else (1.0 if is_ton else 9.81)
@@ -264,10 +292,14 @@ if calc_trigger or "calculated" in st.session_state:
 
   target_layer = soil_layers[bearing_layer_idx]
 
-  # 2. Geotechnical Bearing Capacity
+  # Effective Dimensions (Meyerhof Effective Area Concept)
+  B_eff = B - 2 * e_x_total
+  L_eff = L - 2 * e_y_total
+
+  # 3. Geotechnical Bearing Capacity
   if "SPT N-value" in geo_input_mode:
     N_val = target_layer["N"]
-    Kd = min(1.33, 1 + 0.33 * (Df / B))
+    Kd = min(1.33, 1 + 0.33 * (Df / max(0.1, B_eff)))
 
     if is_imperial:
       q_allow = (N_val / 4.0) * (1.0 if is_ton else 2.0) * Kd
@@ -291,23 +323,27 @@ if calc_trigger or "calculated" in st.session_state:
       Nc, Nq, Ng = 5.14, 1.0, 0.0
 
     gamma_eff = target_layer["gamma"] - (gamma_w if Dw <= Df else 0.0)
-    q_ult = (c_val * Nc) + (q_surcharge * Nq) + (0.5 * gamma_eff * B * Ng)
+    q_ult = (
+        (c_val * Nc)
+        + (q_surcharge * Nq)
+        + (0.5 * gamma_eff * max(0.1, B_eff) * Ng)
+    )
     q_allow = q_ult / FS
 
-  # Service Pressure Check from Input Load (q_max = P/A + 6Mx/BL2 + 6My/LB2)
+  # Service Pressure Check considering Eccentricity
   footing_area = B * L
   q_avg = P_unfactored / footing_area
   q_max_service = (
-      q_avg
-      + (6 * Mx_unfactored / (B * (L**2)))
-      + (6 * My_unfactored / (L * (B**2)))
+      q_avg + (6 * Mx_total / (B * (L**2))) + (6 * My_total / (L * (B**2)))
   )
 
-  # 3. Structural Design Calculations (ACI 318 Factored Load: Pu = 1.2D + 1.6L ~ 1.4P)
+  # Kern Limit Check (Checking if tension exists under footing)
+  is_within_kern = (e_x_total <= B / 6.0) and (e_y_total <= L / 6.0)
+
+  # 4. Structural Design Calculations (ACI 318 Factored Load)
   Pu = 1.4 * P_unfactored
-  Mux = 1.4 * Mx_unfactored
-  Muy = 1.4 * My_unfactored
-  qu_factored = (Pu / footing_area) + (6 * Mux / (B * (L**2)))
+  Mux_total = 1.4 * Mx_total
+  qu_factored = (Pu / footing_area) + (6 * Mux_total / (B * (L**2)))
 
   cover = 0.075 if not is_imperial else (3.0 / 12.0)
   d_eff = h_foot - cover
@@ -323,7 +359,11 @@ if calc_trigger or "calculated" in st.session_state:
   Area_bo = (cx + d_eff) * (cy + d_eff)
   Vu_punch = qu_factored * (footing_area - Area_bo)
 
-  crit_dist = (B / 2) - (cx / 2) - d_eff
+  # Maximum Cantilever Arm considering Column Eccentricity
+  cantilever_max = max(
+      (B / 2.0) - (cx / 2.0) + ex_input, (B / 2.0) - (cx / 2.0) - ex_input
+  )
+  crit_dist = cantilever_max - d_eff
   Vu_oneway = qu_factored * L * max(0.0, crit_dist)
 
   phi_s = 0.75
@@ -348,9 +388,8 @@ if calc_trigger or "calculated" in st.session_state:
         (phi_s * vc_oneway * (L * 12) * (d_eff * 12)) / 1000.0
     ) * force_mult
 
-  # Flexural Reinforcement Design
-  cantilever = (B - cx) / 2
-  Mu = (qu_factored * L * (cantilever**2)) / 2
+  # Flexural Reinforcement Design based on Maximum Cantilever Arm
+  Mu = (qu_factored * L * (cantilever_max**2)) / 2
 
   if not is_imperial:
     L_mm, d_mm = L * 1000, d_eff * 1000
@@ -386,7 +425,7 @@ if calc_trigger or "calculated" in st.session_state:
   num_bars = max(2, num_bars)
   spacing = round((total_len - (2 * clear_cov)) / max(1, (num_bars - 1)), 1)
 
-  # Cross Section View
+  # Cross Section View with Eccentric Column Position
   def draw_multilayer_section():
     fig, ax = plt.subplots(figsize=(6.5, 4.0))
     y_top = 0.0
@@ -420,6 +459,7 @@ if calc_trigger or "calculated" in st.session_state:
           label="Water Table (GWT)",
       )
 
+    # Draw Footing Body
     ax.add_patch(
         plt.Rectangle(
             (-B / 2, -Df - h_foot),
@@ -431,17 +471,23 @@ if calc_trigger or "calculated" in st.session_state:
             label="Footing",
         )
     )
+
+    # Draw Column with Eccentricity Position Shift (ex)
+    col_x_start = ex_input - (cx / 2.0)
     ax.add_patch(
         plt.Rectangle(
-            (-cx / 2, -Df),
+            (col_x_start, -Df),
             cx,
             Df + 0.3,
             facecolor="#4B5563",
             edgecolor="black",
             linewidth=1.5,
-            label="Column",
+            label=f"Column (ex={ex_input}{u_len})",
         )
     )
+
+    # Draw Center Reference Line
+    ax.axvline(0, color="gray", linestyle=":", linewidth=1.0, label="Footing CL")
 
     rebar_y_xdir = -Df - h_foot + cover
     bar_dia_m = (
@@ -482,7 +528,7 @@ if calc_trigger or "calculated" in st.session_state:
         framealpha=0.9,
     )
     plt.title(
-        "Multi-Layer Footing Cross-Section Elevation",
+        "Multi-Layer Footing Cross-Section Elevation (Eccentricity Shifted)",
         fontsize=9,
         fontweight="bold",
     )
@@ -498,14 +544,22 @@ if calc_trigger or "calculated" in st.session_state:
   with col_res:
     st.header("📊 Results & Verification Summary")
 
-    st.subheader("1. Geotechnical Capacity & Soil Pressure")
+    st.subheader("1. Eccentricity & Soil Pressure")
+    e1, e2 = st.columns(2)
+    e1.metric(f"Total ex (ex + My/P)", f"{e_x_total:.3f} {u_len}")
+    e2.metric(f"Total ey (ey + Mx/P)", f"{e_y_total:.3f} {u_len}")
+
     m1, m2 = st.columns(2)
     m1.metric("Allowable Capacity (q_allow)", f"{q_allow:.2f} {u_stress}")
     geo_check = q_max_service <= q_allow
     m2.metric(
-        "Max Soil Pressure (q_max)",
+        "Max Pressure (q_max)",
         f"{q_max_service:.2f} {u_stress}",
-        delta="✅ OK" if geo_check else "❌ OVERLOADED",
+        delta=(
+            "✅ OK"
+            if (geo_check and is_within_kern)
+            else ("⚠️ NO TENSION" if not is_within_kern else "❌ OVERLOADED")
+        ),
     )
 
     st.subheader("2. Structural Shears Check")
@@ -519,7 +573,7 @@ if calc_trigger or "calculated" in st.session_state:
 
     w_check = Phi_Vc_oneway >= Vu_oneway
     s2.metric(
-        "One-Way Shear",
+        "One-Way Shear (Critical Side)",
         f"{Vu_oneway:.1f} / {Phi_Vc_oneway:.1f}",
         delta="✅ PASS" if w_check else "❌ FAIL",
     )
