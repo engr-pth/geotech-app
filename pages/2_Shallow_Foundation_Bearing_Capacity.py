@@ -39,14 +39,20 @@ with col_in:
 
   # Units Label Mapping
   u_len = "ft" if is_imperial else "m"
+  u_force = (
+      "kips"
+      if (is_imperial and not is_ton)
+      else ("ton" if is_ton else "kN")
+  )
+  u_moment = (
+      "kip-ft"
+      if (is_imperial and not is_ton)
+      else ("ton-m" if is_ton else "kN-m")
+  )
   u_stress = (
       "tsf"
       if (is_imperial and is_ton)
-      else (
-          "ksf"
-          if is_imperial
-          else ("t/m²" if is_ton else "kPa")
-      )
+      else ("ksf" if is_imperial else ("t/m²" if is_ton else "kPa"))
   )
   u_gamma = "pcf" if is_imperial else ("t/m³" if is_ton else "kN/m³")
   u_rebar = "in" if is_imperial else "mm"
@@ -59,7 +65,20 @@ with col_in:
       ],
   )
 
-  st.header("2. Multi-Layer Soil Stratigraphy")
+  # --- New Section: Column Loading Inputs ---
+  st.header("2. Applied Column Loads")
+  col_p, col_mx, col_my = st.columns(3)
+  P_unfactored = col_p.number_input(
+      f"Axial Load P ({u_force})", 0.0, 100000.0, 500.0 if not is_imperial else 100.0
+  )
+  Mx_unfactored = col_mx.number_input(
+      f"Moment Mx ({u_moment})", 0.0, 10000.0, 0.0
+  )
+  My_unfactored = col_my.number_input(
+      f"Moment My ({u_moment})", 0.0, 10000.0, 0.0
+  )
+
+  st.header("3. Multi-Layer Soil Stratigraphy")
   num_layers = st.number_input("Number of Soil Layers", 1, 5, 2)
 
   soil_layers = []
@@ -111,7 +130,7 @@ with col_in:
         "N": n_spt_i,
     })
 
-  st.header("3. Footing Geometry & Water Table")
+  st.header("4. Footing Geometry & Water Table")
   B = st.number_input(
       f"Width B ({u_len})", 0.5, 50.0, 1.8 if not is_imperial else 6.0
   )
@@ -129,7 +148,7 @@ with col_in:
   )
   FS = st.number_input("Geotechnical Safety Factor (FS)", 1.0, 10.0, 3.0)
 
-  st.header("4. Structural & Rebar Details")
+  st.header("5. Structural & Rebar Details")
   aci_version = st.selectbox(
       "ACI 318 Code Standard",
       [
@@ -167,7 +186,7 @@ with col_in:
       f"Thickness h ({u_len})", 0.1, 5.0, 0.45 if not is_imperial else 1.5
   )
 
-  # Flexible Rebar Standard Selector (Metric mm vs Imperial Inch)
+  # Rebar Selector (Metric mm vs Imperial Inch)
   rebar_system = st.radio(
       "Rebar Unit System Standard",
       ["Metric Sizes (mm)", "Imperial Sizes (# / in)"],
@@ -202,7 +221,6 @@ with col_in:
       max_value=15.0,
       value=0.0,
       step=0.5,
-      help="ဈေးကွက်ထဲတွင် တကယ့်အမှန် rebar size လျော့နည်းနိုင်သဖြင့် Effective Area ကို % ဖြင့် လျှော့တွက်ရန်",
   )
 
   nom_area = rebar_options[selected_rebar]["area"]
@@ -246,7 +264,7 @@ if calc_trigger or "calculated" in st.session_state:
 
   target_layer = soil_layers[bearing_layer_idx]
 
-  # 2. Geotechnical Capacity Engine
+  # 2. Geotechnical Bearing Capacity
   if "SPT N-value" in geo_input_mode:
     N_val = target_layer["N"]
     Kd = min(1.33, 1 + 0.33 * (Df / B))
@@ -257,7 +275,6 @@ if calc_trigger or "calculated" in st.session_state:
       q_allow = (N_val * 1.2 if is_ton else N_val / 0.05) * Kd
 
     q_ult = q_allow * FS
-    c_val, phi_val = 0.0, 0.0
   else:
     c_val = target_layer["c"]
     phi_val = target_layer["phi"]
@@ -277,12 +294,23 @@ if calc_trigger or "calculated" in st.session_state:
     q_ult = (c_val * Nc) + (q_surcharge * Nq) + (0.5 * gamma_eff * B * Ng)
     q_allow = q_ult / FS
 
-  # 3. Structural Design Calculations (ACI 318)
+  # Service Pressure Check from Input Load (q_max = P/A + 6Mx/BL2 + 6My/LB2)
+  footing_area = B * L
+  q_avg = P_unfactored / footing_area
+  q_max_service = (
+      q_avg
+      + (6 * Mx_unfactored / (B * (L**2)))
+      + (6 * My_unfactored / (L * (B**2)))
+  )
+
+  # 3. Structural Design Calculations (ACI 318 Factored Load: Pu = 1.2D + 1.6L ~ 1.4P)
+  Pu = 1.4 * P_unfactored
+  Mux = 1.4 * Mx_unfactored
+  Muy = 1.4 * My_unfactored
+  qu_factored = (Pu / footing_area) + (6 * Mux / (B * (L**2)))
+
   cover = 0.075 if not is_imperial else (3.0 / 12.0)
   d_eff = h_foot - cover
-
-  qu_factored = 1.5 * q_allow
-  Pu = qu_factored * B * L
 
   if aci_version in ["ACI 318-19", "ACI 318-22"]:
     d_mm_check = d_eff * 1000 if not is_imperial else d_eff * 12 * 25.4
@@ -293,7 +321,7 @@ if calc_trigger or "calculated" in st.session_state:
   # Shear Verification
   bo = 2 * ((cx + d_eff) + (cy + d_eff))
   Area_bo = (cx + d_eff) * (cy + d_eff)
-  Vu_punch = qu_factored * (B * L - Area_bo)
+  Vu_punch = qu_factored * (footing_area - Area_bo)
 
   crit_dist = (B / 2) - (cx / 2) - d_eff
   Vu_oneway = qu_factored * L * max(0.0, crit_dist)
@@ -320,7 +348,7 @@ if calc_trigger or "calculated" in st.session_state:
         (phi_s * vc_oneway * (L * 12) * (d_eff * 12)) / 1000.0
     ) * force_mult
 
-  # Flexural Reinforcement Design & Conversion
+  # Flexural Reinforcement Design
   cantilever = (B - cx) / 2
   Mu = (qu_factored * L * (cantilever**2)) / 2
 
@@ -337,9 +365,8 @@ if calc_trigger or "calculated" in st.session_state:
     Rn = Mu_inlbs / (0.9 * L_in * (d_in**2))
     rho = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn) / (0.85 * fc))))
     rho_req = max(rho, 0.0018)
-    As_req_mm2 = (rho_req * L_in * d_in) * 645.16  # convert in2 to mm2 internally
+    As_req_mm2 = (rho_req * L_in * d_in) * 645.16
 
-  # Convert Rebar Area dynamically according to selected bar system
   if is_selected_metric:
     As_req_disp = As_req_mm2
     area_unit = "mm²"
@@ -359,7 +386,7 @@ if calc_trigger or "calculated" in st.session_state:
   num_bars = max(2, num_bars)
   spacing = round((total_len - (2 * clear_cov)) / max(1, (num_bars - 1)), 1)
 
-  # Section Plot Generator with X and Y Rebar Detail
+  # Cross Section View
   def draw_multilayer_section():
     fig, ax = plt.subplots(figsize=(6.5, 4.0))
     y_top = 0.0
@@ -416,7 +443,6 @@ if calc_trigger or "calculated" in st.session_state:
         )
     )
 
-    # Rebar Plotting: X-direction (Continuous Line) and Y-direction (Dots)
     rebar_y_xdir = -Df - h_foot + cover
     bar_dia_m = (
         rebar_options[selected_rebar]["dia"] / 1000.0
@@ -424,11 +450,10 @@ if calc_trigger or "calculated" in st.session_state:
         else (rebar_options[selected_rebar]["dia"] * 0.0254)
     )
     if is_imperial:
-      bar_dia_m = bar_dia_m / 0.3048  # into ft
+      bar_dia_m = bar_dia_m / 0.3048
 
     rebar_y_ydir = rebar_y_xdir + bar_dia_m
 
-    # X-Dir Main Bar Line
     ax.plot(
         [-B / 2 + cover, B / 2 - cover],
         [rebar_y_xdir, rebar_y_xdir],
@@ -436,8 +461,6 @@ if calc_trigger or "calculated" in st.session_state:
         linewidth=2.0,
         label=f"X-Bar: {num_bars}-{selected_rebar}",
     )
-
-    # Y-Dir Transverse Bars (Dots)
     x_coords = np.linspace(-B / 2 + cover, B / 2 - cover, num_bars)
     ax.scatter(
         x_coords,
@@ -475,14 +498,15 @@ if calc_trigger or "calculated" in st.session_state:
   with col_res:
     st.header("📊 Results & Verification Summary")
 
-    st.subheader("1. Geotechnical & Bearing Capacity")
+    st.subheader("1. Geotechnical Capacity & Soil Pressure")
     m1, m2 = st.columns(2)
-    m1.metric("Effective Overburden (q)", f"{q_surcharge:.2f} {u_stress}")
-    m2.metric("Bearing Soil Layer", f"Layer {bearing_layer_idx+1}")
-
-    m3, m4 = st.columns(2)
-    m3.metric("Ultimate Capacity (q_ult)", f"{q_ult:.2f} {u_stress}")
-    m4.metric("Allowable Capacity (q_allow)", f"{q_allow:.2f} {u_stress}")
+    m1.metric("Allowable Capacity (q_allow)", f"{q_allow:.2f} {u_stress}")
+    geo_check = q_max_service <= q_allow
+    m2.metric(
+        "Max Soil Pressure (q_max)",
+        f"{q_max_service:.2f} {u_stress}",
+        delta="✅ OK" if geo_check else "❌ OVERLOADED",
+    )
 
     st.subheader("2. Structural Shears Check")
     s1, s2 = st.columns(2)
@@ -511,97 +535,3 @@ if calc_trigger or "calculated" in st.session_state:
 
     st.subheader("4. Multi-Layer Cross Section View")
     st.image(draw_multilayer_section())
-
-  # PDF Report Generator
-  def generate_pdf():
-    pdf_buffer = io.BytesIO()
-    doc = SimpleDocTemplate(
-        pdf_buffer,
-        pagesize=letter,
-        rightMargin=36,
-        leftMargin=36,
-        topMargin=36,
-        bottomMargin=36,
-    )
-    story = []
-    styles = getSampleStyleSheet()
-
-    title_style = ParagraphStyle(
-        "T",
-        parent=styles["Heading1"],
-        fontSize=13,
-        textColor=colors.HexColor("#1E3A8A"),
-        spaceAfter=6,
-    )
-    h2_style = ParagraphStyle(
-        "H2",
-        parent=styles["Heading2"],
-        fontSize=10,
-        textColor=colors.HexColor("#2563EB"),
-        spaceBefore=5,
-        spaceAfter=3,
-    )
-    body_style = ParagraphStyle(
-        "B", parent=styles["Normal"], fontSize=8, leading=11
-    )
-
-    story.append(
-        Paragraph(
-            "<b>Multi-Layer Geotechnical & Structural Design Report</b>",
-            title_style,
-        )
-    )
-
-    story.append(Paragraph("<b>1. Soil Stratigraphy Inputs</b>", h2_style))
-    strat_data = [
-        ["Layer", f"Thickness ({u_len})", f"γ ({u_gamma})", "c / N-value", "φ"]
-    ]
-    for idx, ly in enumerate(soil_layers):
-      param_str = f"N={ly['N']}" if "SPT" in geo_input_mode else f"c={ly['c']}"
-      strat_data.append([
-          f"Layer {idx+1}",
-          f"{ly['thickness']}",
-          f"{ly['gamma']}",
-          param_str,
-          f"{ly['phi']}°",
-      ])
-
-    t_strat = Table(strat_data, colWidths=[70, 90, 90, 90, 90])
-    t_strat.setStyle(TableStyle([
-        ("BACKGROUND", (0, 0), (-1, 0), colors.HexColor("#E5E7EB")),
-        ("GRID", (0, 0), (-1, -1), 0.5, colors.HexColor("#D1D5DB")),
-        ("FONTSIZE", (0, 0), (-1, -1), 7.5),
-    ]))
-    story.append(t_strat)
-
-    story.append(
-        Paragraph("<b>2. Calculation Step-by-Step Summary</b>", h2_style)
-    )
-    steps = [
-        f"• <b>Overburden Surcharge:</b> Calculated q at Df = <b>{q_surcharge:.2f} {u_stress}</b> (Bearing Layer: Layer {bearing_layer_idx+1})<br/>",
-        f"• <b>Bearing Capacity:</b> q_ult = {q_ult:.2f} {u_stress} | Allowable Capacity (q_allow) = <b>{q_allow:.2f} {u_stress}</b> (FS={FS})<br/>",
-        f"• <b>Shear Checks ({aci_version}):</b> Punching Vu = {Vu_punch:.1f} vs ϕVc = {Phi_Vc_punch:.1f} ({'PASS' if p_check else 'FAIL'}) | One-Way Vu = {Vu_oneway:.1f} vs ϕVc = {Phi_Vc_oneway:.1f} ({'PASS' if w_check else 'FAIL'})<br/>",
-        f"• <b>Reinforcement Design:</b> Req. As = {As_req_disp:.2f} {area_unit} → <b>Provide {num_bars} Nos - {selected_rebar} (Tolerance {bar_tolerance_pct}%) @ {spacing} {spacing_unit} c/c</b>",
-    ]
-    for s in steps:
-      story.append(Paragraph(s, body_style))
-      story.append(Spacer(1, 3))
-
-    story.append(
-        Paragraph("<b>3. Soil Profile & Foundation Elevation</b>", h2_style)
-    )
-    img_buf = draw_multilayer_section()
-    story.append(Image(img_buf, width=380, height=220))
-
-    doc.build(story)
-    pdf_buffer.seek(0)
-    return pdf_buffer
-
-  st.markdown("---")
-  st.download_button(
-      label="📥 Download Comprehensive Multi-Layer Design Report (PDF)",
-      data=generate_pdf(),
-      file_name="MultiLayer_Footing_Design_Report.pdf",
-      mime="application/pdf",
-      use_container_width=True,
-  )
