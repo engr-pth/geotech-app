@@ -407,7 +407,6 @@ if calc_trigger or "calculated" in st.session_state:
         dim_offset_l = (B / 2) + 0.4
         ax.annotate("", xy=(dim_offset_l, -L / 2), xytext=(dim_offset_l, L / 2), arrowprops=dict(arrowstyle="<->", color="black", lw=1.2))
         ax.text(dim_offset_l + 0.18, 0, f"Footing Length L = {L:.2f} {u_len}", ha="left", va="center", fontsize=8.5, fontweight="bold", rotation=270)
-
         # Expand limits to accommodate external dimensions comfortably
         ax.set_xlim(-B / 2 - 1.2, B / 2 + 1.2)
         ax.set_ylim(-L / 2 - 1.2, L / 2 + 1.2)
