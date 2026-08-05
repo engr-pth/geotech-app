@@ -11,7 +11,7 @@ from reportlab.lib import colors
 
 st.set_page_config(page_title="Bearing Capacity Suite", page_icon="🏗️", layout="wide")
 st.title("🏗️ Bearing Capacity & Settlement Suite")
-st.caption("Includes Hansen, Meyerhof, IS 6403, and IBC Presumptive Load Standards")
+st.caption("Supports Terzaghi, Hansen, Meyerhof, Vesić, IS 6403, SPT N-Value, and IBC Presumptive Load Standards")
 
 col_in, col_res = st.columns([1, 1.2])
 
@@ -19,10 +19,28 @@ with col_in:
     st.header("1. Select Calculation Method")
     method = st.selectbox(
         "Design Method / Standard",
-        ["Hansen Method", "Meyerhof Method", "IS 6403: 1981 (Indian Standard)", "IBC Presumptive Values"]
+        [
+            "Terzaghi Method", 
+            "Hansen Method", 
+            "Meyerhof Method", 
+            "Vesić Method",
+            "SPT N-Value Method (Bowles)",
+            "IS 6403: 1981 (Indian Standard)", 
+            "IBC Presumptive Values"
+        ]
     )
 
-    if method != "IBC Presumptive Values":
+    if method == "SPT N-Value Method (Bowles)":
+        st.header("2. Field Testing Inputs")
+        N60 = st.number_input("Corrected SPT Blow Count (N60)", 1, 100, 15)
+        B = st.number_input("Width, B (m)", 0.1, 20.0, 1.5)
+        Df = st.number_input("Depth, Df (m)", 0.0, 10.0, 1.0)
+        settlement_limit_mm = st.number_input("Allowable Settlement Limit (mm)", 10.0, 100.0, 25.0)
+        FS = st.number_input("Factor of Safety (FS)", 1.0, 10.0, 3.0)
+        ex, ey = 0.0, 0.0
+        Dw = 2.0
+        
+    elif method != "IBC Presumptive Values":
         st.header("2. Soil Parameters")
         c = st.number_input("Cohesion, c (kPa)", 0.0, 500.0, 15.0)
         phi = st.number_input("Friction Angle, φ (deg)", 0.0, 45.0, 28.0)
@@ -30,9 +48,10 @@ with col_in:
         gamma_sat = st.number_input("Saturated γ_sat (kN/m³)", 0.0, 30.0, 20.0)
         Es = st.number_input("Soil Elastic Modulus, Es (MPa)", 1.0, 500.0, 25.0)
         
-        st.header("3. Footing Geometry & Eccentricity")
-        B = st.number_input("Width, B (m)", 0.1, 20.0, 1.5)
-        L = st.number_input("Length, L (m)", 0.1, 20.0, 1.5)
+        st.header("3. Footing Geometry & Shape")
+        footing_shape = st.selectbox("Footing Shape", ["Strip / Continuous", "Square", "Rectangle", "Circular"])
+        B = st.number_input("Width / Diameter, B (m)", 0.1, 20.0, 1.5)
+        L = st.number_input("Length, L (m)", 0.1, 20.0, 1.5 if footing_shape != "Strip / Continuous" else 100.0)
         Df = st.number_input("Depth, Df (m)", 0.0, 10.0, 1.0)
         ex = st.number_input("Eccentricity e_x (m)", 0.0, B/2, 0.0)
         ey = st.number_input("Eccentricity e_y (m)", 0.0, L/2, 0.0)
@@ -58,11 +77,11 @@ with col_in:
         ex, ey = 0.0, 0.0
 
 # --- Calculations ---
-if method != "IBC Presumptive Values":
+if method not in ["IBC Presumptive Values", "SPT N-Value Method (Bowles)"]:
     B_eff = max(0.01, B - (2 * ex))
     L_eff = max(0.01, L - (2 * ey))
 
-    # Water Table
+    # Water Table Adjustment
     gamma_w = 9.81
     if Dw <= Df:
         q = (Dw * gamma_dry) + ((Df - Dw) * (gamma_sat - gamma_w))
@@ -74,52 +93,100 @@ if method != "IBC Presumptive Values":
         q = Df * gamma_dry
         gamma_eff = gamma_dry
 
-    # Seismic
+    # Seismic Coefficients
     gamma_eff = gamma_eff * (1 - kv)
     q = q * (1 - kv)
 
     rad_phi = np.radians(phi)
-    if phi > 0:
-        Nq = np.exp(np.pi * np.tan(rad_phi)) * (np.tan(np.radians(45 + phi/2)))**2
-        Nc = (Nq - 1) / np.tan(rad_phi)
+    
+    # Terzaghi Specific Bearing Capacity Factors
+    if method == "Terzaghi Method":
+        if phi > 0:
+            a = np.exp((0.75 * np.pi - rad_phi / 2) * np.tan(rad_phi))
+            Nq = (a**2) / (2 * (np.cos(np.radians(45 + phi / 2)))**2)
+            Nc = (Nq - 1) / np.tan(rad_phi)
+            Ng = (np.tan(rad_phi) / 2) * ((Kp_terzaghi := (np.tan(np.radians(45 + phi/2)))**2) / (np.cos(rad_phi))**2 - 1)
+        else:
+            Nc, Nq, Ng = 5.7, 1.0, 0.0
+
+        # Terzaghi Shape Factors
+        if footing_shape == "Square":
+            sc, sg = 1.3, 0.8
+        elif footing_shape == "Circular":
+            sc, sg = 1.3, 0.6
+        else:  # Strip or Rectangular approximation
+            sc, sg = 1.0, 1.0
+            
+        q_ult = (c * Nc * sc) + (q * Nq) + (0.5 * gamma_eff * B_eff * Ng * sg)
+        q_allow = q_ult / FS
+
+    # General Nq, Nc for Hansen, Meyerhof, Vesic
     else:
-        Nq, Nc = 1.0, 5.14
+        if phi > 0:
+            Nq = np.exp(np.pi * np.tan(rad_phi)) * (np.tan(np.radians(45 + phi/2)))**2
+            Nc = (Nq - 1) / np.tan(rad_phi)
+        else:
+            Nq, Nc = 1.0, 5.14
 
-    if method == "Hansen Method":
-        Ng = 1.5 * (Nq - 1) * np.tan(rad_phi) if phi > 0 else 0.0
-        sc = 1 + (Nq / Nc) * (B_eff / L_eff) if phi > 0 else 1 + 0.2 * (B_eff / L_eff)
-        sq = 1 + (B_eff / L_eff) * np.tan(rad_phi)
-        sg = 1 - 0.4 * (B_eff / L_eff)
-        q_ult = (c * Nc * sc) + (q * Nq * sq) + (0.5 * gamma_eff * B_eff * Ng * sg)
-        q_allow = q_ult / FS
+        if method == "Hansen Method":
+            Ng = 1.5 * (Nq - 1) * np.tan(rad_phi) if phi > 0 else 0.0
+            sc = 1 + (Nq / Nc) * (B_eff / L_eff) if phi > 0 else 1 + 0.2 * (B_eff / L_eff)
+            sq = 1 + (B_eff / L_eff) * np.tan(rad_phi)
+            sg = 1 - 0.4 * (B_eff / L_eff)
+            q_ult = (c * Nc * sc) + (q * Nq * sq) + (0.5 * gamma_eff * B_eff * Ng * sg)
+            q_allow = q_ult / FS
 
-    elif method == "Meyerhof Method":
-        Ng = (Nq - 1) * np.tan(1.4 * rad_phi) if phi > 0 else 0.0
-        Kp = (np.tan(np.radians(45 + phi/2)))**2
-        sc = 1 + 0.2 * Kp * (B_eff / L_eff)
-        sq = 1 + 0.1 * Kp * (B_eff / L_eff) if phi > 10 else 1.0
-        sg = sq
-        q_ult = (c * Nc * sc) + (q * Nq * sq) + (0.5 * gamma_eff * B_eff * Ng * sg)
-        q_allow = q_ult / FS
+        elif method == "Meyerhof Method":
+            Ng = (Nq - 1) * np.tan(1.4 * rad_phi) if phi > 0 else 0.0
+            Kp = (np.tan(np.radians(45 + phi/2)))**2
+            sc = 1 + 0.2 * Kp * (B_eff / L_eff)
+            sq = 1 + 0.1 * Kp * (B_eff / L_eff) if phi > 10 else 1.0
+            sg = sq
+            q_ult = (c * Nc * sc) + (q * Nq * sq) + (0.5 * gamma_eff * B_eff * Ng * sg)
+            q_allow = q_ult / FS
 
-    elif method == "IS 6403: 1981 (Indian Standard)":
-        Ng = 2 * (Nq + 1) * np.tan(rad_phi) if phi > 0 else 0.0
-        sc = 1 + 0.2 * (B_eff / L_eff)
-        sq = 1 + 0.2 * (B_eff / L_eff)
-        sg = 1 - 0.4 * (B_eff / L_eff)
-        dc = 1 + 0.2 * (Df / B_eff) * np.sqrt(max(1.0, (1 + np.sin(rad_phi))/(1 - np.sin(rad_phi))))
-        dq = dg = 1 + 0.1 * (Df / B_eff) * np.tan(rad_phi) if phi > 10 else 1.0
-        
-        q_net_ult = (c * Nc * sc * dc) + (q * (Nq - 1) * sq * dq) + (0.5 * gamma_eff * B_eff * Ng * sg * dg)
-        q_ult = q_net_ult + q
-        q_allow = (q_net_ult / FS) + q
+        elif method == "Vesić Method":
+            Ng = 2 * (Nq + 1) * np.tan(rad_phi) if phi > 0 else 0.0
+            sc = 1 + (Nq / Nc) * (B_eff / L_eff)
+            sq = 1 + (B_eff / L_eff) * np.tan(rad_phi)
+            sg = 1 - 0.4 * (B_eff / L_eff)
+            q_ult = (c * Nc * sc) + (q * Nq * sq) + (0.5 * gamma_eff * B_eff * Ng * sg)
+            q_allow = q_ult / FS
 
-    # Settlement
+        elif method == "IS 6403: 1981 (Indian Standard)":
+            Ng = 2 * (Nq + 1) * np.tan(rad_phi) if phi > 0 else 0.0
+            sc = 1 + 0.2 * (B_eff / L_eff)
+            sq = 1 + 0.2 * (B_eff / L_eff)
+            sg = 1 - 0.4 * (B_eff / L_eff)
+            dc = 1 + 0.2 * (Df / B_eff) * np.sqrt(max(1.0, (1 + np.sin(rad_phi))/(1 - np.sin(rad_phi))))
+            dq = dg = 1 + 0.1 * (Df / B_eff) * np.tan(rad_phi) if phi > 10 else 1.0
+            
+            q_net_ult = (c * Nc * sc * dc) + (q * (Nq - 1) * sq * dq) + (0.5 * gamma_eff * B_eff * Ng * sg * dg)
+            q_ult = q_net_ult + q
+            q_allow = (q_net_ult / FS) + q
+
+    # Elastic Settlement Calculation
     mu = 0.35
     I_s = 0.88
     elastic_settlement_mm = (q_allow * B_eff * (1 - mu**2) * I_s / (Es * 1000)) * 1000
 
-else: # IBC Table 1806.2
+elif method == "SPT N-Value Method (Bowles)":
+    B_eff = B
+    # Bowles (1996) Empirical Equations for 25mm settlement
+    Fd = 1 + 0.33 * (Df / B)
+    Fd = min(Fd, 1.33)
+    
+    if B <= 1.2:
+        q_net_25 = (N60 / 0.05) * Fd  # kPa for 25mm settlement
+    else:
+        q_net_25 = (N60 / 0.08) * ((B + 0.3) / B)**2 * Fd
+        
+    # Scale for user-defined allowable settlement
+    q_allow = q_net_25 * (settlement_limit_mm / 25.0)
+    q_ult = q_allow * FS
+    elastic_settlement_mm = settlement_limit_mm
+
+else:  # IBC Table 1806.2
     ibc_values = {
         "1. Crystalline Bedrock (12,000 psf / ~575 kPa)": 575.0,
         "2. Sedimentary & Foliated Rock (4,000 psf / ~190 kPa)": 190.0,
