@@ -17,9 +17,9 @@ from reportlab.platypus import (
 
 # Page Setup
 st.set_page_config(
-    page_title="Multi-Layer Footing Design Suite", page_icon="🏗️", layout="wide"
+    page_title="Single Footing Design Suite", page_icon="🏗️", layout="wide"
 )
-st.title("🏗️ Multi-Layer Geotechnical & Structural Footing Design Suite")
+st.title("🏗️ Single Geotechnical & Structural Footing Design Suite")
 
 col_in, col_res = st.columns([1.1, 1.1])
 
@@ -49,15 +49,20 @@ with col_in:
     geo_input_mode = st.radio(
         "Geotechnical Calculation Method",
         [
+            "Direct Gross Allowable Soil Capacity",
             "c-phi Parameters (Analytical - Terzaghi/Meyerhof)",
             "SPT N-value (Empirical Method - Meyerhof/Bowles)",
         ],
     )
 
-    # --- Column Loading Inputs ---
+    # --- Column Loading Inputs (DL and LL unfactored) ---
     st.header("2. Applied Column Loads & Eccentricity")
-    col_p, col_mx, col_my = st.columns(3)
-    P_unfactored = col_p.number_input(f"Axial Load P ({u_force})", 0.0, 100000.0, 500.0 if not is_imperial else 100.0)
+    col_p1, col_p2 = st.columns(2)
+    P_DL = col_p1.number_input(f"Dead Load P_DL ({u_force})", 0.0, 100000.0, 300.0 if not is_imperial else 60.0)
+    P_LL = col_p2.number_input(f"Live Load P_LL ({u_force})", 0.0, 100000.0, 200.0 if not is_imperial else 40.0)
+    P_unfactored = P_DL + P_LL
+
+    col_mx, col_my = st.columns(2)
     Mx_unfactored = col_mx.number_input(f"Moment Mx ({u_moment})", 0.0, 10000.0, 0.0)
     My_unfactored = col_my.number_input(f"Moment My ({u_moment})", 0.0, 10000.0, 0.0)
 
@@ -65,39 +70,55 @@ with col_in:
     ex_input = col_ex.number_input(f"Column Eccentricity ex ({u_len})", -5.0, 5.0, 0.0, step=0.05)
     ey_input = col_ey.number_input(f"Column Eccentricity ey ({u_len})", -5.0, 5.0, 0.0, step=0.05)
 
-    st.header("3. Multi-Layer Soil Stratigraphy")
-    num_layers = st.number_input("Number of Soil Layers", 1, 5, 2)
+    # --- Geotechnical Inputs based on selected Mode ---
+    if "Direct" in geo_input_mode:
+        q_allow_direct = st.number_input(f"Gross Allowable Soil Capacity q_allow ({u_stress})", 1.0, 10000.0, 150.0 if not is_imperial else 3.0)
+        num_layers = 1
+        soil_layers = [{"thickness": 10.0, "gamma": 18.0 if not is_imperial else 115.0, "c": 0, "phi": 0, "N": 0}]
+        FS = 3.0
+    else:
+        q_allow_direct = None
+        st.header("3. Multi-Layer Soil Stratigraphy")
+        num_layers = st.number_input("Number of Soil Layers", 1, 5, 2)
 
-    soil_layers = []
-    for i in range(int(num_layers)):
-        st.subheader(f"Soil Layer {i+1}")
-        lc1, lc2, lc3, lc4 = st.columns(4)
-        thick = lc1.number_input(f"Thick ({u_len})", 0.5, 50.0, 1.5 if i == 0 else 3.0, key=f"thick_{i}")
-        g_unit = lc2.number_input(f"γ ({u_gamma})", 0.0, 500.0, ((115.0 if is_imperial else (1.8 if is_ton else 18.0)) if i == 0 else (125.0 if is_imperial else (2.0 if is_ton else 20.0))), key=f"gamma_{i}")
+        soil_layers = []
+        for i in range(int(num_layers)):
+            st.subheader(f"Soil Layer {i+1}")
+            lc1, lc2, lc3, lc4 = st.columns(4)
+            thick = lc1.number_input(f"Thick ({u_len})", 0.5, 50.0, 1.5 if i == 0 else 3.0, key=f"thick_{i}")
+            g_unit = lc2.number_input(f"γ ({u_gamma})", 0.0, 500.0, ((115.0 if is_imperial else (1.8 if is_ton else 18.0)) if i == 0 else (125.0 if is_imperial else (2.0 if is_ton else 20.0))), key=f"gamma_{i}")
 
-        if "c-phi" in geo_input_mode:
-            c_i = lc3.number_input(f"c ({u_stress})", 0.0, 5000.0, 10.0 if not is_imperial else 0.2, key=f"c_{i}")
-            phi_i = lc4.number_input("φ (deg)", 0.0, 45.0, 28.0 if i == 0 else 32.0, key=f"phi_{i}")
-            n_spt_i = 0
-        else:
-            n_spt_i = lc3.number_input("SPT N", 1, 100, 12 if i == 0 else 22, key=f"n_{i}")
-            c_i, phi_i = 0.0, 0.0
+            if "c-phi" in geo_input_mode:
+                c_i = lc3.number_input(f"c ({u_stress})", 0.0, 5000.0, 10.0 if not is_imperial else 0.2, key=f"c_{i}")
+                phi_i = lc4.number_input("φ (deg)", 0.0, 45.0, 28.0 if i == 0 else 32.0, key=f"phi_{i}")
+                n_spt_i = 0
+            else:
+                n_spt_i = lc3.number_input("SPT N", 1, 100, 12 if i == 0 else 22, key=f"n_{i}")
+                c_i, phi_i = 0.0, 0.0
 
-        soil_layers.append({"thickness": thick, "gamma": g_unit, "c": c_i, "phi": phi_i, "N": n_spt_i})
+            soil_layers.append({"thickness": thick, "gamma": g_unit, "c": c_i, "phi": phi_i, "N": n_spt_i})
+        FS = st.number_input("Geotechnical Safety Factor (FS)", 1.0, 10.0, 3.0)
 
     st.header("4. Geometry Settings (Footing & Column)")
     col_b, col_l = st.columns(2)
     B = col_b.number_input(f"Footing Width B ({u_len})", 0.5, 50.0, 1.8 if not is_imperial else 6.0)
     L = col_l.number_input(f"Footing Length L ({u_len})", 0.5, 50.0, 1.8 if not is_imperial else 6.0)
 
-    col_cx, col_cy = st.columns(2)
-    cx = col_cx.number_input(f"Column Size cx ({u_len})", 0.1, 5.0, 0.4 if not is_imperial else 1.0)
-    cy = col_cy.number_input(f"Column Size cy ({u_len})", 0.1, 5.0, 0.4 if not is_imperial else 1.25)
+    # Column Shape Selection
+    col_shape = st.radio("Column Shape", ["Rectangular / Square", "Circular"])
+    if col_shape == "Circular":
+        D_col = st.number_input(f"Column Diameter D ({u_len})", 0.1, 5.0, 0.45 if not is_imperial else 1.25)
+        cx = D_col
+        cy = D_col
+    else:
+        D_col = None
+        col_cx, col_cy = st.columns(2)
+        cx = col_cx.number_input(f"Column Size cx ({u_len})", 0.1, 5.0, 0.4 if not is_imperial else 1.0)
+        cy = col_cy.number_input(f"Column Size cy ({u_len})", 0.1, 5.0, 0.4 if not is_imperial else 1.25)
 
     Df = st.number_input(f"Embedment Depth Df ({u_len})", 0.0, 20.0, 1.0 if not is_imperial else 3.5)
     h_foot = st.number_input(f"Footing Thickness h ({u_len})", 0.1, 5.0, 0.45 if not is_imperial else 1.5)
     Dw = st.number_input(f"Water Table Depth Dw ({u_len})", 0.0, 50.0, 1.5 if not is_imperial else 5.0)
-    FS = st.number_input("Geotechnical Safety Factor (FS)", 1.0, 10.0, 3.0)
 
     st.header("5. Structural & Rebar Details")
     aci_version = st.selectbox("ACI 318 Code Standard", ["ACI 318-22", "ACI 318-19", "ACI 318-14", "ACI 318-11"])
@@ -126,17 +147,14 @@ with col_in:
     selected_rebar = col_rb.selectbox("Select Reinforcement Bar", list(rebar_options.keys()))
     bar_tolerance_pct = col_tol.number_input("Market Bar Size Reduction (%)", 0.0, 15.0, 0.0, step=0.5)
 
-    # Clear Concrete Cover set strictly to 3 inches (0.075 m or 3.0 inches)
     clear_cover_input = st.selectbox("Clear Concrete Cover", ["3.0 inches (75 mm) - Standard Footing Cover"], index=0)
-    
-    # Hook Type Selection for Footing Reinforcement Detail
     hook_type = st.radio("Rebar End Hook Type", ["None (Straight Bar)", "90-Degree Standard Hook", "180-Degree Standard Hook"])
 
     nom_area = rebar_options[selected_rebar]["area"]
     actual_area = nom_area * (1.0 - (bar_tolerance_pct / 100.0))
     is_selected_metric = rebar_options[selected_rebar]["is_metric"]
 
-    calc_trigger = st.button("🚀 Calculate Multi-Layer Design", type="primary", use_container_width=True)
+    calc_trigger = st.button("🚀 Calculate Single Footing Design", type="primary", use_container_width=True)
 
 # --- Calculation Engine ---
 if calc_trigger or "calculated" in st.session_state:
@@ -173,8 +191,12 @@ if calc_trigger or "calculated" in st.session_state:
     B_eff = max(0.1, B - 2 * e_x_total)
     L_eff = max(0.1, L - 2 * e_y_total)
 
-    # 3. Geotechnical Bearing Capacity
-    if "SPT" in geo_input_mode:
+    # 3. Geotechnical Bearing Capacity Calculation
+    if "Direct" in geo_input_mode:
+        q_allow = q_allow_direct
+        q_ult = q_allow * FS
+        Nc, Nq, Ng = 0.0, 0.0, 0.0
+    elif "SPT" in geo_input_mode:
         N_val = target_layer["N"]
         Kd = min(1.33, 1 + 0.33 * (Df / B_eff))
         if is_imperial:
@@ -203,12 +225,11 @@ if calc_trigger or "calculated" in st.session_state:
     q_max_service = q_avg + (6 * Mx_total / (B * (L**2))) + (6 * My_total / (L * (B**2)))
     is_within_kern = (e_x_total <= B / 6.0) and (e_y_total <= L / 6.0)
 
-    # 4. Structural Design Calculations
-    Pu = 1.4 * P_unfactored
-    Mux_total = 1.4 * Mx_total
+    # 4. Structural Design Calculations (Factored DL & LL)
+    Pu = (1.2 * P_DL) + (1.6 * P_LL)
+    Mux_total = (1.2 * Mx_unfactored) + (1.6 * (P_unfactored * abs(ey_input)))
     qu_factored = (Pu / footing_area) + (6 * Mux_total / (B * (L**2)))
 
-    # 3 inches (0.075 m or 3/12 ft) explicit cover selection
     cover = 0.075 if not is_imperial else (3.0 / 12.0)
     d_eff = h_foot - cover
 
@@ -218,11 +239,17 @@ if calc_trigger or "calculated" in st.session_state:
     else:
         lambda_s = 1.0
 
-    bo = 2 * ((cx + d_eff) + (cy + d_eff))
-    Area_bo = (cx + d_eff) * (cy + d_eff)
-    Vu_punch = qu_factored * (footing_area - Area_bo)
+    # Punching Shear Perimeter adjustment for Circular Column
+    if col_shape == "Circular":
+        bo = np.pi * (D_col + d_eff)
+        Area_bo = (np.pi / 4.0) * ((D_col + d_eff) ** 2)
+        cantilever_max = max((B / 2.0) - (0.886 * D_col / 2.0) + ex_input, (B / 2.0) - (0.886 * D_col / 2.0) - ex_input)
+    else:
+        bo = 2 * ((cx + d_eff) + (cy + d_eff))
+        Area_bo = (cx + d_eff) * (cy + d_eff)
+        cantilever_max = max((B / 2.0) - (cx / 2.0) + ex_input, (B / 2.0) - (cx / 2.0) - ex_input)
 
-    cantilever_max = max((B / 2.0) - (cx / 2.0) + ex_input, (B / 2.0) - (cx / 2.0) - ex_input)
+    Vu_punch = qu_factored * (footing_area - Area_bo)
     crit_dist = cantilever_max - d_eff
     Vu_oneway = qu_factored * L * max(0.0, crit_dist)
 
@@ -268,162 +295,54 @@ if calc_trigger or "calculated" in st.session_state:
         area_unit = "in²"
         spacing_unit = "in"
         total_len = L * 12 if is_imperial else (L * 1000) / 25.4
-        clear_cov = 3.0 # 3 inches explicit cover
+        clear_cov = 3.0
 
     num_bars = int(np.ceil(As_req_disp / actual_area))
     num_bars = max(2, num_bars)
     spacing = round((total_len - (2 * clear_cov)) / max(1, (num_bars - 1)), 1)
 
-    # --- ENHANCED DETAILED PDF GENERATOR ---
-    def generate_pdf_report(plot1, plot2):
-        buf = io.BytesIO()
-        doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
-        styles = getSampleStyleSheet()
-
-        title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=15, spaceAfter=10, textColor=colors.HexColor('#1E3A8A'))
-        sec_heading = ParagraphStyle('SecHeading', parent=styles['Heading2'], fontSize=12, spaceBefore=8, spaceAfter=6, textColor=colors.HexColor('#0F172A'))
-        subsec_heading = ParagraphStyle('SubSecHeading', parent=styles['Heading3'], fontSize=10, spaceBefore=4, spaceAfter=4, textColor=colors.HexColor('#1E40AF'))
-        normal_p = ParagraphStyle('NormalP', parent=styles['Normal'], fontSize=8.5, leading=11, spaceAfter=4)
-        code_p = ParagraphStyle('CodeP', parent=styles['Normal'], fontSize=8, leading=10, fontName='Courier', spaceAfter=3, textColor=colors.HexColor('#334155'))
-
-        story = []
-
-        story.append(Paragraph("<b>STRUCTURAL & GEOTECHNICAL FOOTING DESIGN CALCULATION REPORT</b>", title_style))
-        story.append(Paragraph(f"Code Standard: <b>{aci_version}</b> | Unit System: <b>{unit_system}</b> | Clear Cover: <b>3.0 in (75 mm)</b>", normal_p))
-        story.append(Paragraph(f"Reinforcement Hook Type: <b>{hook_type}</b>", normal_p))
-        story.append(Spacer(1, 6))
-
-        # 1. Loading & Eccentricity Steps
-        story.append(Paragraph("1. Column Loads & Eccentricity Calculations", sec_heading))
-        story.append(Paragraph(f"• Axial Load (P) = <b>{P_unfactored:.2f} {u_force}</b> | Mx = <b>{Mx_unfactored:.2f} {u_moment}</b> | My = <b>{My_unfactored:.2f} {u_moment}</b>", normal_p))
-        story.append(Paragraph(f"• Applied Column Eccentricity: e<sub>x,input</sub> = {ex_input:.2f} {u_len}, e<sub>y,input</sub> = {ey_input:.2f} {u_len}", normal_p))
-        story.append(Paragraph("<b>Step-by-step Eccentricity Derivation:</b>", subsec_heading))
-        story.append(Paragraph(f"  M<sub>x,total</sub> = M<sub>x</sub> + (P × |e<sub>y</sub>|) = {Mx_unfactored:.2f} + ({P_unfactored:.2f} × {abs(ey_input):.2f}) = <b>{Mx_total:.2f} {u_moment}</b>", code_p))
-        story.append(Paragraph(f"  M<sub>y,total</sub> = M<sub>y</sub> + (P × |e<sub>x</sub>|) = {My_unfactored:.2f} + ({P_unfactored:.2f} × {abs(ex_input):.2f}) = <b>{My_total:.2f} {u_moment}</b>", code_p))
-        story.append(Paragraph(f"  e<sub>x,total</sub> = M<sub>y,total</sub> / P = {My_total:.2f} / {P_unfactored:.2f} = <b>{e_x_total:.4f} {u_len}</b>", code_p))
-        story.append(Paragraph(f"  e<sub>y,total</sub> = M<sub>x,total</sub> / P = {Mx_total:.2f} / {P_unfactored:.2f} = <b>{e_y_total:.4f} {u_len}</b>", code_p))
-
-        # 2. Geotechnical
-        story.append(Spacer(1, 4))
-        story.append(Paragraph("2. Geotechnical Bearing Capacity (Multi-Layer Engine)", sec_heading))
-        story.append(Paragraph(f"• Footing Dimensions: B = {B:.2f} {u_len}, L = {L:.2f} {u_len}, D<sub>f</sub> = {Df:.2f} {u_len}", normal_p))
-        story.append(Paragraph("<b>Step-by-step Effective Dimensions & Surcharge:</b>", subsec_heading))
-        story.append(Paragraph(f"  B<sub>eff</sub> = B - 2(e<sub>x,total</sub>) = {B:.2f} - 2({e_x_total:.4f}) = <b>{B_eff:.3f} {u_len}</b>", code_p))
-        story.append(Paragraph(f"  L<sub>eff</sub> = L - 2(e<sub>y,total</sub>) = {L:.2f} - 2({e_y_total:.4f}) = <b>{L_eff:.3f} {u_len}</b>", code_p))
-        story.append(Paragraph(f"  Effective Soil Surcharge q<sub>surcharge</sub> = Σ (γ<sub>i</sub> × h<sub>i</sub>) = <b>{q_surcharge:.2f} {u_stress}</b>", code_p))
-
-        if "c-phi" in geo_input_mode:
-            story.append(Paragraph("<b>Terzaghi / Meyerhof Analytical Equations:</b>", subsec_heading))
-            story.append(Paragraph(f"  N<sub>c</sub> = {Nc:.2f}, N<sub>q</sub> = {Nq:.2f}, N<sub>γ</sub> = {Ng:.2f} (Bearing Layer φ = {target_layer['phi']}°)", code_p))
-            story.append(Paragraph(f"  q<sub>ult</sub> = (c × N<sub>c</sub>) + (q<sub>surcharge</sub> × N<sub>q</sub>) + (0.5 × γ<sub>eff</sub> × B<sub>eff</sub> × N<sub>γ</sub>)", code_p))
-            story.append(Paragraph(f"  q<sub>ult</sub> = ({target_layer['c']} × {Nc:.2f}) + ({q_surcharge:.2f} × {Nq:.2f}) + (0.5 × {target_layer['gamma']} × {B_eff:.2f} × {Ng:.2f}) = <b>{q_ult:.2f} {u_stress}</b>", code_p))
-        else:
-            story.append(Paragraph("<b>Meyerhof / Bowles Empirical SPT N Method:</b>", subsec_heading))
-            story.append(Paragraph(f"  K<sub>d</sub> = min(1.33, 1 + 0.33 × D<sub>f</sub>/B<sub>eff</sub>) = <b>{min(1.33, 1 + 0.33*(Df/B_eff)):.3f}</b>", code_p))
-            story.append(Paragraph(f"  q<sub>ult</sub> = q<sub>allow</sub> × FS = <b>{q_ult:.2f} {u_stress}</b>", code_p))
-
-        story.append(Paragraph(f"  q<sub>allow</sub> = q<sub>ult</sub> / FS = {q_ult:.2f} / {FS} = <b>{q_allow:.2f} {u_stress}</b>", code_p))
-        story.append(Paragraph(f"  q<sub>max,service</sub> = P/A + 6M<sub>x</sub>/(BL²) + 6M<sub>y</sub>/(LB²) = <b>{q_max_service:.2f} {u_stress}</b> {'[PASS]' if q_max_service <= q_allow else '[OVERLOADED]'}", code_p))
-
-        # 3. Structural Shear Calculations
-        story.append(Spacer(1, 4))
-        story.append(Paragraph("3. Structural Shear Verification (ACI 318)", sec_heading))
-        story.append(Paragraph(f"• Factored Load P<sub>u</sub> = 1.4 × P = 1.4 × {P_unfactored:.2f} = <b>{Pu:.2f} {u_force}</b>", normal_p))
-        story.append(Paragraph(f"• Factored Ultimate Pressure q<sub>u</sub> = P<sub>u</sub>/A + 6M<sub>ux</sub>/(BL²) = <b>{qu_factored:.2f} {u_stress}</b>", normal_p))
-        story.append(Paragraph(f"• Effective Depth d<sub>eff</sub> = h - cover = {h_foot:.3f} - {cover:.3f} = <b>{d_eff:.3f} {u_len}</b> | Size Effect λ<sub>s</sub> = <b>{lambda_s:.3f}</b>", normal_p))
-
-        story.append(Paragraph("<b>3.1 Two-Way Punching Shear Calculation:</b>", subsec_heading))
-        story.append(Paragraph(f"  Critical Perimeter b<sub>o</sub> = 2 × [(c<sub>x</sub> + d) + (c<sub>y</sub> + d)] = 2 × [({cx:.2f}+{d_eff:.3f}) + ({cy:.2f}+{d_eff:.3f})] = <b>{bo:.3f} {u_len}</b>", code_p))
-        story.append(Paragraph(f"  Punching Area A<sub>bo</sub> = (c<sub>x</sub> + d)(c<sub>y</sub> + d) = <b>{Area_bo:.3f} {u_len}²</b>", code_p))
-        story.append(Paragraph(f"  V<sub>u,punch</sub> = q<sub>u</sub> × (B × L - A<sub>bo</sub>) = {qu_factored:.2f} × ({B:.2f}×{L:.2f} - {Area_bo:.3f}) = <b>{Vu_punch:.2f} {u_force}</b>", code_p))
-        story.append(Paragraph(f"  v<sub>c,punch</sub> = 0.33 × λ<sub>s</sub> × √(f'c) = 0.33 × {lambda_s:.3f} × √({fc}) = {vc_punch:.3f} MPa", code_p))
-        story.append(Paragraph(f"  φV<sub>c,punch</sub> = φ × v<sub>c</sub> × b<sub>o</sub> × d = <b>{Phi_Vc_punch:.2f} {u_force}</b> {'[PASS]' if Phi_Vc_punch >= Vu_punch else '[FAIL]'}", code_p))
-
-        story.append(Paragraph("<b>3.2 One-Way Beam Shear Calculation:</b>", subsec_heading))
-        story.append(Paragraph(f"  Max Cantilever Arm = (B/2 - c<sub>x</sub>/2 + e<sub>x</sub>) = <b>{cantilever_max:.3f} {u_len}</b>", code_p))
-        story.append(Paragraph(f"  Critical Shear Distance = Cantilever - d = {cantilever_max:.3f} - {d_eff:.3f} = <b>{crit_dist:.3f} {u_len}</b>", code_p))
-        story.append(Paragraph(f"  V<sub>u,oneway</sub> = q<sub>u</sub> × L × Critical Distance = {qu_factored:.2f} × {L:.2f} × {max(0.0, crit_dist):.3f} = <b>{Vu_oneway:.2f} {u_force}</b>", code_p))
-        story.append(Paragraph(f"  φV<sub>c,oneway</sub> = φ × (0.17 × λ<sub>s</sub> × √(f'c)) × L × d = <b>{Phi_Vc_oneway:.2f} {u_force}</b> {'[PASS]' if Phi_Vc_oneway >= Vu_oneway else '[FAIL]'}", code_p))
-
-        # 4. Flexural Design
-        story.append(Spacer(1, 4))
-        story.append(Paragraph("4. Flexural Reinforcement Design", sec_heading))
-        story.append(Paragraph(f"  M<sub>u</sub> = (q<sub>u</sub> × L × Cantilever²) / 2 = ({qu_factored:.2f} × {L:.2f} × {cantilever_max:.3f}²) / 2 = <b>{Mu:.2f} {u_moment}</b>", code_p))
-        story.append(Paragraph(f"  Nominal Resistance Factor R<sub>n</sub> = M<sub>u</sub> / (φ × b × d²) = <b>{Rn:.4f} N/mm²</b>", code_p))
-        story.append(Paragraph(f"  Calculated Steel Ratio ρ = (0.85 × f'c / f<sub>y</sub>) × [1 - √(1 - 2R<sub>n</sub> / (0.85 × f'c))] = <b>{rho:.6f}</b>", code_p))
-        story.append(Paragraph(f"  Required Steel Ratio ρ<sub>req</sub> = max(ρ, ρ<sub>min</sub> = 0.0018) = <b>{rho_req:.6f}</b>", code_p))
-        story.append(Paragraph(f"  Required Steel Area A<sub>s,req</sub> = ρ<sub>req</sub> × L × d = <b>{As_req_disp:.2f} {area_unit}</b>", code_p))
-        story.append(Paragraph(f"  Selected Bar: <b>{selected_rebar}</b> with <b>{hook_type}</b> (Effective Area = {actual_area:.2f} {area_unit} with {bar_tolerance_pct}% tolerance)", code_p))
-        story.append(Paragraph(f"  Bar Count Calculation: N = ceil(A<sub>s,req</sub> / A<sub>bar</sub>) = ceil({As_req_disp:.2f} / {actual_area:.2f}) = <b>{num_bars} Bars</b>", code_p))
-        story.append(Paragraph(f"  Spacing Calculation: s = (L - 2×Cover) / (N - 1) = <b>{spacing} {spacing_unit} c/c (Cover = 3.0 in)</b>", code_p))
-        story.append(Paragraph(f"<b>FINAL SPECIFICATION: Provide {num_bars} Nos - {selected_rebar} with {hook_type} @ {spacing} {spacing_unit} c/c (Both Ways)</b>", subsec_heading))
-
-        # 5. Drawings
-        story.append(Spacer(1, 8))
-        story.append(Paragraph("5. Structural Detailing Drawings", sec_heading))
-        img_table = Table([
-            [RLImage(plot1, width=250, height=170), RLImage(plot2, width=250, height=170)]
-        ], colWidths=[260, 260])
-        img_table.setStyle(TableStyle([
-            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
-            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
-        ]))
-        story.append(img_table)
-
-        doc.build(story)
-        buf.seek(0)
-        return buf
-
-    # --- Drawing Logic with Hooks ---
+    # --- Drawing Logic (Corrected 180 degree hook) ---
     def draw_cross_section():
         fig, ax = plt.subplots(figsize=(6.5, 4.5))
-        y_top = 0.0
-        colors_list = ["#E5D3B3", "#D2B48C", "#C4A484", "#B8860B", "#A0522D"]
-
-        for idx, layer in enumerate(soil_layers):
-            y_bottom = y_top - layer["thickness"]
-            ax.fill_between([-B / 2 - 1.2, B / 2 + 1.2], [y_top, y_top], [y_bottom, y_bottom], color=colors_list[idx % 5], alpha=0.5)
-            y_top = y_bottom
-
-        ax.plot([-B / 2 - 1.2, B / 2 + 1.2], [0, 0], "k--", linewidth=1, label="Ground Level")
         f_bottom = -Df - h_foot
+        ax.fill_between([-B / 2 - 1.2, B / 2 + 1.2], [0, 0], [f_bottom - 0.5, f_bottom - 0.5], color="#E5D3B3", alpha=0.5)
+        ax.axhline(0, color="k", linestyle="--", linewidth=1, label="Ground Level")
         ax.add_patch(plt.Rectangle((-B / 2, f_bottom), B, h_foot, facecolor="#9CA3AF", edgecolor="black", linewidth=1.5, label="Footing"))
-        
-        col_x_start = ex_input - (cx / 2.0)
-        ax.add_patch(plt.Rectangle((col_x_start, -Df), cx, Df + 0.3, facecolor="#4B5563", edgecolor="black", linewidth=1.5, label="Column"))
 
-        ax.axvline(0, color="gray", linestyle=":", linewidth=1.0)
+        col_x_start = ex_input - (cx / 2.0)
+        if col_shape == "Circular":
+            ax.add_patch(plt.Rectangle((col_x_start, -Df), cx, Df + 0.3, facecolor="#4B5563", edgecolor="black", linewidth=1.5, label="Circular Col (Sec)"))
+        else:
+            ax.add_patch(plt.Rectangle((col_x_start, -Df), cx, Df + 0.3, facecolor="#4B5563", edgecolor="black", linewidth=1.5, label="Column"))
+
         rebar_y_xdir = f_bottom + cover
-        
-        # Draw Main Rebar Line
         left_x = -B / 2 + cover
         right_x = B / 2 - cover
         ax.plot([left_x, right_x], [rebar_y_xdir, rebar_y_xdir], color="red", linewidth=2.0, label=f"Bar: {num_bars}-{selected_rebar}")
-        
-        # Render Hooks if selected
+
         hook_len = 0.12 if not is_imperial else 0.4
         if "90-Degree" in hook_type:
             ax.plot([left_x, left_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
             ax.plot([right_x, right_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
         elif "180-Degree" in hook_type:
+            # Corrected Vertical U-Turn Hook
             ax.plot([left_x, left_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
-            ax.plot([left_x, left_x - 0.05], [rebar_y_xdir + hook_len, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+            ax.plot([left_x, left_x + 0.03], [rebar_y_xdir + hook_len, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+            ax.plot([left_x + 0.03, left_x + 0.03], [rebar_y_xdir + hook_len, rebar_y_xdir + 0.03], color="red", linewidth=2.0)
+
             ax.plot([right_x, right_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
-            ax.plot([right_x, right_x + 0.05], [rebar_y_xdir + hook_len, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+            ax.plot([right_x, right_x - 0.03], [rebar_y_xdir + hook_len, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+            ax.plot([right_x - 0.03, right_x - 0.03], [rebar_y_xdir + hook_len, rebar_y_xdir + 0.03], color="red", linewidth=2.0)
 
         x_coords = np.linspace(left_x, right_x, num_bars)
-        ax.scatter(x_coords, [rebar_y_xdir + 0.02] * num_bars, color="darkblue", s=15, zorder=5, label=f"Cross-Bars")
+        ax.scatter(x_coords, [rebar_y_xdir + 0.02] * num_bars, color="darkblue", s=15, zorder=5)
 
-        dim_y = f_bottom - 0.25
-        ax.annotate("", xy=(-B / 2, dim_y), xytext=(B / 2, dim_y), arrowprops=dict(arrowstyle="<->", color="black", lw=1.2))
-        ax.text(0, dim_y - 0.12, f"B = {B:.2f} {u_len} (Cover: 3 in)", ha="center", va="top", fontsize=8, fontweight="bold")
-        
         ax.set_xlim(-B / 2 - 1.0, B / 2 + 1.0)
         ax.set_ylim(f_bottom - 0.7, 0.5)
         ax.set_aspect("equal")
         ax.axis("off")
-        ax.legend(loc="upper right", bbox_to_anchor=(1.38, 1.0), fontsize=6.5)
-        plt.title(f"Footing Elevation Section ({hook_type})", fontsize=9, fontweight="bold")
+        ax.legend(loc="upper right", fontsize=6.5)
+        plt.title(f"Elevation Section ({hook_type})", fontsize=9, fontweight="bold")
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -435,30 +354,19 @@ if calc_trigger or "calculated" in st.session_state:
     def draw_plan_view():
         fig, ax = plt.subplots(figsize=(6.5, 4.5))
         ax.add_patch(patches.Rectangle((-B / 2, -L / 2), B, L, facecolor="#D1D5DB", edgecolor="black", linewidth=1.5))
-        
-        col_x_min = ex_input - (cx / 2.0)
-        col_y_min = ey_input - (cy / 2.0)
-        ax.add_patch(patches.Rectangle((col_x_min, col_y_min), cx, cy, facecolor="#374151", edgecolor="black", linewidth=1.5))
 
-        x_rebar_coords = np.linspace(-B / 2 + cover, B / 2 - cover, num_bars)
-        y_rebar_coords = np.linspace(-L / 2 + cover, L / 2 - cover, num_bars)
-
-        for xc in x_rebar_coords:
-            ax.plot([xc, xc], [-L / 2 + cover, L / 2 - cover], color="darkblue", linewidth=1.0, alpha=0.7)
-        for yc in y_rebar_coords:
-            ax.plot([-B / 2 + cover, B / 2 - cover], [yc, yc], color="red", linewidth=1.0, alpha=0.7)
-
-        ax.annotate("", xy=(col_x_min, col_y_min + cy + 0.15), xytext=(col_x_min + cx, col_y_min + cy + 0.15), arrowprops=dict(arrowstyle="<->", color="black", lw=1.0))
-        ax.text(ex_input, col_y_min + cy + 0.22, f"cx={cx:.2f}{u_len}", ha="center", va="bottom", fontsize=7.5)
-
-        ax.annotate("", xy=(col_x_min + cx + 0.15, col_y_min), xytext=(col_x_min + cx + 0.15, col_y_min + cy), arrowprops=dict(arrowstyle="<->", color="black", lw=1.0))
-        ax.text(col_x_min + cx + 0.22, ey_input, f"cy={cy:.2f}{u_len}", ha="left", va="center", fontsize=7.5, rotation=270)
+        if col_shape == "Circular":
+            ax.add_patch(patches.Circle((ex_input, ey_input), radius=D_col / 2.0, facecolor="#374151", edgecolor="black", linewidth=1.5))
+        else:
+            col_x_min = ex_input - (cx / 2.0)
+            col_y_min = ey_input - (cy / 2.0)
+            ax.add_patch(patches.Rectangle((col_x_min, col_y_min), cx, cy, facecolor="#374151", edgecolor="black", linewidth=1.5))
 
         ax.set_xlim(-B / 2 - 0.8, B / 2 + 0.8)
         ax.set_ylim(-L / 2 - 0.8, L / 2 + 0.8)
         ax.set_aspect("equal")
         ax.axis("off")
-        plt.title("Footing Structural Top Plan View (Cover = 3 in)", fontsize=9, fontweight="bold")
+        plt.title("Footing Plan Top View", fontsize=9, fontweight="bold")
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -467,38 +375,23 @@ if calc_trigger or "calculated" in st.session_state:
         plt.close()
         return buf
 
-    # --- Render Output ---
-    sec_img_buf = draw_cross_section()
-    plan_img_buf = draw_plan_view()
+    # Render Outputs
+    sec_img = draw_cross_section()
+    plan_img = draw_plan_view()
 
     with col_res:
         st.header("📊 Results & Verification Summary")
-        
-        # UI Metrics
         st.subheader("1. Eccentricity & Soil Pressure")
-        e1, e2 = st.columns(2)
-        e1.metric(f"Total ex", f"{e_x_total:.3f} {u_len}")
-        e2.metric(f"Max Pressure (q_max)", f"{q_max_service:.2f} {u_stress}", delta="✅ OK" if q_max_service <= q_allow else "❌ OVERLOADED")
-        
+        st.metric("Total Unfactored P", f"{P_unfactored:.2f} {u_force} (DL: {P_DL}, LL: {P_LL})")
+        st.metric("Max Pressure (q_max)", f"{q_max_service:.2f} {u_stress}", delta="✅ OK" if q_max_service <= q_allow else "❌ OVERLOADED")
+
         st.subheader("2. Structural Shears Check")
         s1, s2 = st.columns(2)
         s1.metric("Punching Shear", f"{Vu_punch:.1f} / {Phi_Vc_punch:.1f}", delta="✅ PASS" if Phi_Vc_punch >= Vu_punch else "❌ FAIL")
         s2.metric("One-Way Shear", f"{Vu_oneway:.1f} / {Phi_Vc_oneway:.1f}", delta="✅ PASS" if Phi_Vc_oneway >= Vu_oneway else "❌ FAIL")
 
         st.subheader("3. Reinforcement Arrangement")
-        st.markdown(f"**Design Recommendation:** Provide **{num_bars} Nos - {selected_rebar}** with **{hook_type}** @ **{spacing} {spacing_unit} c/c** (Both Directions, Cover = 3 in)")
+        st.markdown(f"**Design Recommendation:** Provide **{num_bars} Nos - {selected_rebar}** with **{hook_type}** @ **{spacing} {spacing_unit} c/c**")
 
-        st.image(sec_img_buf, caption=f"Cross-Section Elevation ({hook_type}, 3 in Cover)")
-        st.image(plan_img_buf, caption="Footing Plan Top View")
-
-        # --- PDF Download Button ---
-        st.markdown("---")
-        pdf_buffer = generate_pdf_report(sec_img_buf, plan_img_buf)
-        st.download_button(
-            label="📄 Download Detailed Calculation Report (PDF)",
-            data=pdf_buffer.getvalue(),
-            file_name="Detailed_Footing_Design_Report.pdf",
-            mime="application/pdf",
-            type="primary",
-            use_container_width=True
-        )
+        st.image(sec_img, caption="Cross-Section Elevation")
+        st.image(plan_img, caption="Plan View")
