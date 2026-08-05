@@ -161,7 +161,7 @@ with col_in:
   # Column Size Settings
   col_cx, col_cy = st.columns(2)
   cx = col_cx.number_input(
-      f"Column Size cx ({u_len})", 0.1, 5.0, 0.4 if not is_imperial else 1.25
+      f"Column Size cx ({u_len})", 0.1, 5.0, 0.4 if not is_imperial else 1.0
   )
   cy = col_cy.number_input(
       f"Column Size cy ({u_len})", 0.1, 5.0, 0.4 if not is_imperial else 1.25
@@ -420,7 +420,7 @@ if calc_trigger or "calculated" in st.session_state:
   num_bars = max(2, num_bars)
   spacing = round((total_len - (2 * clear_cov)) / max(1, (num_bars - 1)), 1)
 
-  # --- Drawing Functions with Dimension Annotations ---
+  # --- Drawing Functions with Enhanced Legend & Dimensions ---
   def draw_cross_section():
     fig, ax = plt.subplots(figsize=(6.5, 4.5))
     y_top = 0.0
@@ -445,7 +445,6 @@ if calc_trigger or "calculated" in st.session_state:
         label="Ground Level",
     )
 
-    # Footing Box
     f_bottom = -Df - h_foot
     ax.add_patch(
         plt.Rectangle(
@@ -459,7 +458,6 @@ if calc_trigger or "calculated" in st.session_state:
         )
     )
 
-    # Column Box
     col_x_start = ex_input - (cx / 2.0)
     ax.add_patch(
         plt.Rectangle(
@@ -473,10 +471,8 @@ if calc_trigger or "calculated" in st.session_state:
         )
     )
 
-    # Footing Centerline
     ax.axvline(0, color="gray", linestyle=":", linewidth=1.0)
 
-    # Rebars
     rebar_y_xdir = f_bottom + cover
     bar_dia_m = (
         rebar_options[selected_rebar]["dia"] / 1000.0
@@ -486,12 +482,13 @@ if calc_trigger or "calculated" in st.session_state:
     if is_imperial:
       bar_dia_m = bar_dia_m / 0.3048
 
+    # Rebar details with explicit bar counts in Legend
     ax.plot(
         [-B / 2 + cover, B / 2 - cover],
         [rebar_y_xdir, rebar_y_xdir],
         color="red",
         linewidth=2.0,
-        label="X-Bar",
+        label=f"X-Bar: {num_bars}-{selected_rebar}",
     )
     x_coords = np.linspace(-B / 2 + cover, B / 2 - cover, num_bars)
     ax.scatter(
@@ -500,11 +497,10 @@ if calc_trigger or "calculated" in st.session_state:
         color="darkblue",
         s=15,
         zorder=5,
-        label="Y-Bar (Dots)",
+        label=f"Y-Bar: {num_bars}-{selected_rebar} (Dots)",
     )
 
-    # --- Dimension Lines (Cross Section) ---
-    # B Dimension (Footing Width)
+    # Dimensions
     dim_y = f_bottom - 0.25
     ax.annotate(
         "",
@@ -522,7 +518,6 @@ if calc_trigger or "calculated" in st.session_state:
         fontweight="bold",
     )
 
-    # Footing Thickness h Dimension
     dim_x = B / 2 + 0.2
     ax.annotate(
         "",
@@ -539,7 +534,6 @@ if calc_trigger or "calculated" in st.session_state:
         fontsize=8,
     )
 
-    # Df Dimension
     dim_x_df = -B / 2 - 0.2
     ax.annotate(
         "",
@@ -556,7 +550,6 @@ if calc_trigger or "calculated" in st.session_state:
         fontsize=8,
     )
 
-    # Column Size cx Dimension
     col_top = 0.15
     ax.annotate(
         "",
@@ -573,7 +566,6 @@ if calc_trigger or "calculated" in st.session_state:
         fontsize=7.5,
     )
 
-    # Eccentricity ex Dimension
     if abs(ex_input) > 0.01:
       ax.annotate(
           "",
@@ -597,12 +589,12 @@ if calc_trigger or "calculated" in st.session_state:
     ax.axis("off")
     ax.legend(
         loc="upper right",
-        bbox_to_anchor=(1.35, 1.0),
+        bbox_to_anchor=(1.38, 1.0),
         fontsize=6.5,
         framealpha=0.9,
     )
     plt.title(
-        "Footing Elevation Section View (With Dimensions)",
+        "Footing Elevation Section View (With Detailed Rebar Counts)",
         fontsize=9,
         fontweight="bold",
     )
@@ -617,7 +609,6 @@ if calc_trigger or "calculated" in st.session_state:
   def draw_plan_view():
     fig, ax = plt.subplots(figsize=(6.5, 4.5))
 
-    # Footing Plan Outer Boundary
     footing_rect = patches.Rectangle(
         (-B / 2, -L / 2),
         B,
@@ -629,7 +620,6 @@ if calc_trigger or "calculated" in st.session_state:
     )
     ax.add_patch(footing_rect)
 
-    # Column Plan Boundary
     col_x_min = ex_input - (cx / 2.0)
     col_y_min = ey_input - (cy / 2.0)
     col_rect = patches.Rectangle(
@@ -643,11 +633,9 @@ if calc_trigger or "calculated" in st.session_state:
     )
     ax.add_patch(col_rect)
 
-    # Centerlines
     ax.axhline(0, color="gray", linestyle="--", linewidth=0.8)
     ax.axvline(0, color="gray", linestyle="--", linewidth=0.8)
 
-    # Reinforcement Grid Lines
     x_rebar_coords = np.linspace(-B / 2 + cover, B / 2 - cover, num_bars)
     y_rebar_coords = np.linspace(-L / 2 + cover, L / 2 - cover, num_bars)
 
@@ -671,8 +659,7 @@ if calc_trigger or "calculated" in st.session_state:
           alpha=0.7,
       )
 
-    # --- Dimension Lines (Plan View) ---
-    # Width B Dimension
+    # Footing Dimensions (B & L)
     dim_y = -L / 2 - 0.3
     ax.annotate(
         "",
@@ -690,7 +677,6 @@ if calc_trigger or "calculated" in st.session_state:
         fontweight="bold",
     )
 
-    # Length L Dimension
     dim_x = B / 2 + 0.3
     ax.annotate(
         "",
@@ -709,7 +695,7 @@ if calc_trigger or "calculated" in st.session_state:
         rotation=270,
     )
 
-    # Column Size Dimensions (cx & cy)
+    # Column cx Dimension
     ax.annotate(
         "",
         xy=(col_x_min, col_y_min + cy + 0.15),
@@ -719,10 +705,27 @@ if calc_trigger or "calculated" in st.session_state:
     ax.text(
         ex_input,
         col_y_min + cy + 0.22,
-        f"cx={cx:.2f}",
+        f"cx={cx:.2f}{u_len}",
         ha="center",
         va="bottom",
         fontsize=7.5,
+    )
+
+    # Column cy Dimension
+    ax.annotate(
+        "",
+        xy=(col_x_min + cx + 0.15, col_y_min),
+        xytext=(col_x_min + cx + 0.15, col_y_min + cy),
+        arrowprops=dict(arrowstyle="<->", color="black", lw=1.0),
+    )
+    ax.text(
+        col_x_min + cx + 0.22,
+        ey_input,
+        f"cy={cy:.2f}{u_len}",
+        ha="left",
+        va="center",
+        fontsize=7.5,
+        rotation=270,
     )
 
     ax.set_xlim(-B / 2 - 0.8, B / 2 + 0.8)
@@ -730,7 +733,7 @@ if calc_trigger or "calculated" in st.session_state:
     ax.set_aspect("equal")
     ax.axis("off")
     plt.title(
-        "Footing Structural Top Plan View (With Dimensions)",
+        "Footing Structural Top Plan View (With cx & cy Dimensions)",
         fontsize=9,
         fontweight="bold",
     )
@@ -791,6 +794,9 @@ if calc_trigger or "calculated" in st.session_state:
 
     st.subheader("4. Detailed Drawings with Dimensions")
     st.image(
-        draw_cross_section(), caption="Cross-Section Elevation with Dimensions"
+        draw_cross_section(), caption="Cross-Section Elevation with Rebar Counts"
     )
-    st.image(draw_plan_view(), caption="Footing Plan Top View with Dimensions")
+    st.image(
+        draw_plan_view(),
+        caption="Footing Plan Top View with Column Dimensions (cx, cy)",
+    )
