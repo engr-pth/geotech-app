@@ -9,20 +9,31 @@ st.caption("Supports USCS (ASTM D2487), AASHTO (M 145), BS 5930 / Eurocode 7, an
 col_in, col_res = st.columns([1, 1.2])
 
 with col_in:
-    st.header("1. Sieve Analysis Inputs (%)")
-    gravel = st.number_input("Gravel (> 4.75mm) %", 0.0, 100.0, 15.0)
-    sand = st.number_input("Sand (0.075mm - 4.75mm) %", 0.0, 100.0, 35.0)
-    fines = st.number_input("Fines (< 0.075mm / No. 200) %", 0.0, 100.0, 50.0)
+    st.header("1. Grain Size Distribution Inputs (%)")
+    gravel = st.number_input("Gravel (> 4.75mm) %", 0.0, 100.0, 15.0, step=0.1)
+    sand = st.number_input("Sand (0.075mm - 4.75mm) %", 0.0, 100.0, 35.0, step=0.1)
+    silt = st.number_input("Silt (0.002mm - 0.075mm) %", 0.0, 100.0, 30.0, step=0.1)
+    clay = st.number_input("Clay (< 0.002mm) %", 0.0, 100.0, 20.0, step=0.1)
+    
+    # Calculate Total Fines Automatically
+    fines = silt + clay
+    total_percent = gravel + sand + silt + clay
+    
+    # Display Validation Status
+    if abs(total_percent - 100.0) > 0.01:
+        st.error(f"⚠️ **Total Percentage Error:** {total_percent:.1f}% (Must equal 100%)")
+    else:
+        st.success(f" Total Percentage: `{total_percent:.1f}%` | **Fines (< 0.075mm):** `{fines:.1f}%`")
     
     st.header("2. Atterberg Limits (%)")
-    LL = st.number_input("Liquid Limit (LL)", 0.0, 150.0, 45.0)
-    PL = st.number_input("Plastic Limit (PL)", 0.0, 100.0, 20.0)
+    LL = st.number_input("Liquid Limit (LL)", 0.0, 150.0, 45.0, step=0.1)
+    PL = st.number_input("Plastic Limit (PL)", 0.0, 100.0, 20.0, step=0.1)
     PI = max(0.0, LL - PL)
     st.info(f"**Plasticity Index (PI):** `{PI:.1f}%`")
     
-    st.header("3. Grain Size Distribution (Optional)")
-    Cu = st.number_input("Uniformity Coefficient (Cu)", 0.0, 50.0, 4.0)
-    Cc = st.number_input("Coefficient of Curvature (Cc)", 0.0, 10.0, 1.0)
+    st.header("3. Grain Size Parameters (Optional)")
+    Cu = st.number_input("Uniformity Coefficient (Cu)", 0.0, 50.0, 4.0, step=0.1)
+    Cc = st.number_input("Coefficient of Curvature (Cc)", 0.0, 10.0, 1.0, step=0.1)
     
     st.header("4. Select Primary Classification Standard")
     system = st.radio("Standard", ["USCS (ASTM D2487)", "AASHTO (M 145)", "BS 5930 / Eurocode", "IS 1498 (Indian Standard)"])
@@ -133,6 +144,24 @@ with col_res:
         "IS 1498 (Indian Standard)": is_res
     })
     
+    # Soil Composition Breakdown Bar Chart
+    st.subheader("🧱 Soil Composition Breakdown")
+    fig_bar, ax_bar = plt.subplots(figsize=(6, 1.2))
+    components = ['Gravel', 'Sand', 'Silt', 'Clay']
+    values = [gravel, sand, silt, clay]
+    colors = ['#8d6e63', '#d4e157', '#4fc3f7', '#e57373']
+    
+    left = 0
+    for comp, val, col in zip(components, values, colors):
+        if val > 0:
+            ax_bar.barh('Composition', val, left=left, color=col, label=f"{comp}: {val:.1f}%")
+            left += val
+            
+    ax_bar.set_xlim(0, 100)
+    ax_bar.axis('off')
+    ax_bar.legend(loc='lower center', bbox_to_anchor=(0.5, -0.8), ncol=4, frameon=False)
+    st.pyplot(fig_bar)
+
     # Plasticity Chart
     st.subheader("📈 Casagrande Plasticity Chart")
     fig, ax = plt.subplots(figsize=(6, 3.5))
