@@ -167,23 +167,28 @@ with col_in:
       f"Thickness h ({u_len})", 0.1, 5.0, 0.45 if not is_imperial else 1.5
   )
 
-  # Metric Rebar Selection starting from 16mm up to 32mm
-  if not is_imperial:
+  # Flexible Rebar Standard Selector (Metric mm vs Imperial Inch)
+  rebar_system = st.radio(
+      "Rebar Unit System Standard",
+      ["Metric Sizes (mm)", "Imperial Sizes (# / in)"],
+  )
+
+  if "Metric" in rebar_system:
     rebar_options = {
-        "16 mm": {"dia": 16.0, "area": 201.06},
-        "18 mm": {"dia": 18.0, "area": 254.47},
-        "20 mm": {"dia": 20.0, "area": 314.16},
-        "22 mm": {"dia": 22.0, "area": 380.13},
-        "25 mm": {"dia": 25.0, "area": 490.87},
-        "32 mm": {"dia": 32.0, "area": 804.25},
+        "16 mm": {"dia": 16.0, "area": 201.06, "is_metric": True},
+        "18 mm": {"dia": 18.0, "area": 254.47, "is_metric": True},
+        "20 mm": {"dia": 20.0, "area": 314.16, "is_metric": True},
+        "22 mm": {"dia": 22.0, "area": 380.13, "is_metric": True},
+        "25 mm": {"dia": 25.0, "area": 490.87, "is_metric": True},
+        "32 mm": {"dia": 32.0, "area": 804.25, "is_metric": True},
     }
   else:
     rebar_options = {
-        "#5 (0.625in)": {"dia": 0.625, "area": 0.31},
-        "#6 (0.75in)": {"dia": 0.75, "area": 0.44},
-        "#7 (0.875in)": {"dia": 0.875, "area": 0.60},
-        "#8 (1.0in)": {"dia": 1.0, "area": 0.79},
-        "#9 (1.128in)": {"dia": 1.128, "area": 1.00},
+        "#5 (0.625in)": {"dia": 0.625, "area": 0.31, "is_metric": False},
+        "#6 (0.75in)": {"dia": 0.75, "area": 0.44, "is_metric": False},
+        "#7 (0.875in)": {"dia": 0.875, "area": 0.60, "is_metric": False},
+        "#8 (1.0in)": {"dia": 1.0, "area": 0.79, "is_metric": False},
+        "#9 (1.128in)": {"dia": 1.128, "area": 1.00, "is_metric": False},
     }
 
   col_rb, col_tol = st.columns(2)
@@ -200,10 +205,9 @@ with col_in:
       help="ဈေးကွက်ထဲတွင် တကယ့်အမှန် rebar size လျော့နည်းနိုင်သဖြင့် Effective Area ကို % ဖြင့် လျှော့တွက်ရန်",
   )
 
-  # Calculate Nominal and Effective Actual Area
-  nom_dia = rebar_options[selected_rebar]["dia"]
   nom_area = rebar_options[selected_rebar]["area"]
   actual_area = nom_area * (1.0 - (bar_tolerance_pct / 100.0))
+  is_selected_metric = rebar_options[selected_rebar]["is_metric"]
 
   st.markdown("---")
   calc_trigger = st.button(
@@ -214,7 +218,7 @@ with col_in:
 if calc_trigger or "calculated" in st.session_state:
   st.session_state["calculated"] = True
 
-  # 1. Multi-Layer Overburden Surcharge (q) Calculation
+  # 1. Multi-Layer Surcharge Engine
   q_surcharge = 0.0
   current_depth = 0.0
   gamma_w = 62.4 if is_imperial else (1.0 if is_ton else 9.81)
@@ -316,7 +320,7 @@ if calc_trigger or "calculated" in st.session_state:
         (phi_s * vc_oneway * (L * 12) * (d_eff * 12)) / 1000.0
     ) * force_mult
 
-  # Flexural Reinforcement Design
+  # Flexural Reinforcement Design & Conversion
   cantilever = (B - cx) / 2
   Mu = (qu_factored * L * (cantilever**2)) / 2
 
@@ -326,22 +330,36 @@ if calc_trigger or "calculated" in st.session_state:
     Rn = Mu_Nmm / (0.9 * L_mm * (d_mm**2))
     rho = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn) / (0.85 * fc))))
     rho_req = max(rho, 0.0018)
-    As_req = rho_req * L_mm * d_mm
-    num_bars = int(np.ceil(As_req / actual_area))
-    num_bars = max(2, num_bars)
-    spacing = int((L_mm - 150) / max(1, (num_bars - 1)))
+    As_req_mm2 = rho_req * L_mm * d_mm
   else:
     L_in, d_in = L * 12, d_eff * 12
     Mu_inlbs = Mu * 12000 * (2.0 if is_ton else 1.0)
     Rn = Mu_inlbs / (0.9 * L_in * (d_in**2))
     rho = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn) / (0.85 * fc))))
     rho_req = max(rho, 0.0018)
-    As_req = rho_req * L_in * d_in
-    num_bars = int(np.ceil(As_req / actual_area))
-    num_bars = max(2, num_bars)
-    spacing = round((L_in - 6) / max(1, (num_bars - 1)), 2)
+    As_req_mm2 = (rho_req * L_in * d_in) * 645.16  # convert in2 to mm2 internally
 
-  # Section Plot Generator
+  # Convert Rebar Area dynamically according to selected bar system
+  if is_selected_metric:
+    As_req_disp = As_req_mm2
+    area_unit = "mm²"
+    spacing_unit = "mm"
+    bar_actual_area = actual_area
+    total_len = L * 1000 if not is_imperial else L * 304.8
+    clear_cov = 75.0
+  else:
+    As_req_disp = As_req_mm2 / 645.16
+    area_unit = "in²"
+    spacing_unit = "in"
+    bar_actual_area = actual_area
+    total_len = L * 12 if is_imperial else (L * 1000) / 25.4
+    clear_cov = 3.0
+
+  num_bars = int(np.ceil(As_req_disp / bar_actual_area))
+  num_bars = max(2, num_bars)
+  spacing = round((total_len - (2 * clear_cov)) / max(1, (num_bars - 1)), 1)
+
+  # Section Plot Generator with X and Y Rebar Detail
   def draw_multilayer_section():
     fig, ax = plt.subplots(figsize=(6.5, 4.0))
     y_top = 0.0
@@ -398,13 +416,36 @@ if calc_trigger or "calculated" in st.session_state:
         )
     )
 
-    rebar_y = -Df - h_foot + cover
+    # Rebar Plotting: X-direction (Continuous Line) and Y-direction (Dots)
+    rebar_y_xdir = -Df - h_foot + cover
+    bar_dia_m = (
+        rebar_options[selected_rebar]["dia"] / 1000.0
+        if is_selected_metric
+        else (rebar_options[selected_rebar]["dia"] * 0.0254)
+    )
+    if is_imperial:
+      bar_dia_m = bar_dia_m / 0.3048  # into ft
+
+    rebar_y_ydir = rebar_y_xdir + bar_dia_m
+
+    # X-Dir Main Bar Line
     ax.plot(
         [-B / 2 + cover, B / 2 - cover],
-        [rebar_y, rebar_y],
+        [rebar_y_xdir, rebar_y_xdir],
         color="red",
-        linewidth=2.5,
-        label=f"Rebars: {num_bars}-{selected_rebar}",
+        linewidth=2.0,
+        label=f"X-Bar: {num_bars}-{selected_rebar}",
+    )
+
+    # Y-Dir Transverse Bars (Dots)
+    x_coords = np.linspace(-B / 2 + cover, B / 2 - cover, num_bars)
+    ax.scatter(
+        x_coords,
+        [rebar_y_ydir] * num_bars,
+        color="darkblue",
+        s=15,
+        zorder=5,
+        label=f"Y-Bar: {num_bars}-{selected_rebar} (Dots)",
     )
 
     ax.set_xlim(-B / 2 - 0.8, B / 2 + 0.8)
@@ -413,7 +454,7 @@ if calc_trigger or "calculated" in st.session_state:
     ax.axis("off")
     ax.legend(
         loc="upper right",
-        bbox_to_anchor=(1.35, 1.0),
+        bbox_to_anchor=(1.38, 1.0),
         fontsize=6.5,
         framealpha=0.9,
     )
@@ -460,11 +501,12 @@ if calc_trigger or "calculated" in st.session_state:
     )
 
     st.subheader("3. Reinforcement Arrangement")
-    st.success(
-        f"<b>Required Area (As):</b> {As_req:.2f} {'mm²' if not is_imperial else 'in²'}<br/>"
-        f"<b>Effective Bar Area ({100-bar_tolerance_pct}%):</b> {actual_area:.1f} {'mm²' if not is_imperial else 'in²'}<br/>"
-        f"<b>Design Recommendation:</b> Provide <b>{num_bars} Nos - {selected_rebar}</b> bars @ <b>{spacing} {u_rebar} c/c</b> (Both Ways)",
-        icon="💡",
+    st.markdown(
+        f"""
+        **Required Area ($A_s$):** {As_req_disp:.2f} {area_unit}  
+        **Effective Bar Area ({100-bar_tolerance_pct:.1f}%):** {bar_actual_area:.2f} {area_unit}  
+        **Design Recommendation:** Provide **{num_bars} Nos - {selected_rebar}** bars @ **{spacing} {spacing_unit} c/c** (Both Directions)
+        """
     )
 
     st.subheader("4. Multi-Layer Cross Section View")
@@ -539,7 +581,7 @@ if calc_trigger or "calculated" in st.session_state:
         f"• <b>Overburden Surcharge:</b> Calculated q at Df = <b>{q_surcharge:.2f} {u_stress}</b> (Bearing Layer: Layer {bearing_layer_idx+1})<br/>",
         f"• <b>Bearing Capacity:</b> q_ult = {q_ult:.2f} {u_stress} | Allowable Capacity (q_allow) = <b>{q_allow:.2f} {u_stress}</b> (FS={FS})<br/>",
         f"• <b>Shear Checks ({aci_version}):</b> Punching Vu = {Vu_punch:.1f} vs ϕVc = {Phi_Vc_punch:.1f} ({'PASS' if p_check else 'FAIL'}) | One-Way Vu = {Vu_oneway:.1f} vs ϕVc = {Phi_Vc_oneway:.1f} ({'PASS' if w_check else 'FAIL'})<br/>",
-        f"• <b>Reinforcement Design:</b> Req. As = {As_req:.2f} → <b>Provide {num_bars} Nos - {selected_rebar} (Tolerance {bar_tolerance_pct}%) @ {spacing} {u_rebar} c/c</b>",
+        f"• <b>Reinforcement Design:</b> Req. As = {As_req_disp:.2f} {area_unit} → <b>Provide {num_bars} Nos - {selected_rebar} (Tolerance {bar_tolerance_pct}%) @ {spacing} {spacing_unit} c/c</b>",
     ]
     for s in steps:
       story.append(Paragraph(s, body_style))
