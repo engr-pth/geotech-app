@@ -176,6 +176,7 @@ if calc_trigger or "calculated" in st.session_state:
         else:
             q_allow = (N_val * 1.2 if is_ton else N_val / 0.05) * Kd
         q_ult = q_allow * FS
+        Nc, Nq, Ng = 0.0, 0.0, 0.0
     else:
         c_val = target_layer["c"]
         phi_val = target_layer["phi"]
@@ -266,76 +267,106 @@ if calc_trigger or "calculated" in st.session_state:
     num_bars = max(2, num_bars)
     spacing = round((total_len - (2 * clear_cov)) / max(1, (num_bars - 1)), 1)
 
-    # --- PDF GENERATOR FUNCTION ---
+    # --- ENHANCED DETAILED PDF GENERATOR ---
     def generate_pdf_report(plot1, plot2):
         buf = io.BytesIO()
-        doc = SimpleDocTemplate(buf, pagesize=letter)
+        doc = SimpleDocTemplate(buf, pagesize=letter, leftMargin=36, rightMargin=36, topMargin=36, bottomMargin=36)
         styles = getSampleStyleSheet()
-        
-        title_style = ParagraphStyle('Title', parent=styles['Heading1'], fontSize=16, spaceAfter=12)
-        h2 = ParagraphStyle('Heading2', parent=styles['Heading2'], fontSize=14, spaceAfter=10, textColor=colors.darkblue)
-        normal = ParagraphStyle('Normal', parent=styles['Normal'], fontSize=10, spaceAfter=8)
-        
-        story = []
-        
-        story.append(Paragraph("🏗️ Detailed Footing Design Calculation Report", title_style))
-        story.append(Spacer(1, 10))
-        
-        # 1. Loading
-        story.append(Paragraph("1. Applied Loads & Eccentricity Calculation", h2))
-        story.append(Paragraph(f"• Axial Load (P) = {P_unfactored:.2f} {u_force}", normal))
-        story.append(Paragraph(f"• Moment X ($M_x$) = {Mx_unfactored:.2f} {u_moment}, Moment Y ($M_y$) = {My_unfactored:.2f} {u_moment}", normal))
-        story.append(Paragraph(f"• Initial Eccentricity: $e_x$ = {ex_input:.2f} {u_len}, $e_y$ = {ey_input:.2f} {u_len}", normal))
-        story.append(Paragraph(f"• Total Eccentricity (Including Moment):", normal))
-        story.append(Paragraph(f"  - $e_{{x,total}} = e_x + (M_y / P) = {e_x_total:.3f} {u_len}$", normal))
-        story.append(Paragraph(f"  - $e_{{y,total}} = e_y + (M_x / P) = {e_y_total:.3f} {u_len}$", normal))
-        
-        # 2. Geotechnical
-        story.append(Spacer(1, 10))
-        story.append(Paragraph("2. Geotechnical Bearing Capacity Calculation", h2))
-        story.append(Paragraph(f"• Surcharge ($q_{{surcharge}}$) at depth $D_f={Df}{u_len}$: {q_surcharge:.2f} {u_stress}", normal))
-        story.append(Paragraph(f"• Effective Footing Dimensions: $B_{{eff}} = B - 2e_x = {B_eff:.2f} {u_len}$, $L_{{eff}} = L - 2e_y = {L_eff:.2f} {u_len}$", normal))
-        if "SPT" not in geo_input_mode:
-            story.append(Paragraph(f"• Bearing Capacity Factors: $N_c={Nc:.2f}, N_q={Nq:.2f}, N_\gamma={Ng:.2f}$", normal))
-            story.append(Paragraph(f"• Ultimate Capacity ($q_{{ult}}$) = $(c \cdot N_c) + (q_{{sur}} \cdot N_q) + (0.5 \cdot \gamma \cdot B_{{eff}} \cdot N_\gamma)$ = {q_ult:.2f} {u_stress}", normal))
-        else:
-            story.append(Paragraph(f"• Ultimate Capacity (SPT Method) = {q_ult:.2f} {u_stress}", normal))
-        story.append(Paragraph(f"• Allowable Capacity ($q_{{allow}} = q_{{ult}} / FS$) = {q_ult:.2f} / {FS} = <b>{q_allow:.2f} {u_stress}</b>", normal))
-        story.append(Paragraph(f"• Max Applied Soil Pressure ($q_{{max}}$) = P/A + Mx/S + My/S = <b>{q_max_service:.2f} {u_stress}</b>", normal))
-        
-        # 3. Structural Shears
-        story.append(Spacer(1, 10))
-        story.append(Paragraph("3. Structural Shear Checks", h2))
-        story.append(Paragraph(f"• Factored Ultimate Pressure ($q_u$) = {qu_factored:.2f} {u_stress}", normal))
-        story.append(Paragraph(f"• Effective Depth ($d$) = {d_eff:.3f} {u_len}", normal))
-        story.append(Paragraph(f"<b>Punching Shear (Two-Way):</b>", normal))
-        story.append(Paragraph(f"  - Factored Punching Shear ($V_{{u,punch}}$) = $q_u \times (Area_{{footing}} - Area_{{critical}})$ = {Vu_punch:.2f} {u_force}", normal))
-        story.append(Paragraph(f"  - Design Shear Capacity ($\phi V_{{c,punch}}$) = {Phi_Vc_punch:.2f} {u_force}", normal))
-        story.append(Paragraph(f"<b>One-Way Shear (Beam Action):</b>", normal))
-        story.append(Paragraph(f"  - Factored One-Way Shear ($V_{{u,oneway}}$) at distance $d$ from column face = {Vu_oneway:.2f} {u_force}", normal))
-        story.append(Paragraph(f"  - Design Shear Capacity ($\phi V_{{c,oneway}}$) = {Phi_Vc_oneway:.2f} {u_force}", normal))
 
-        # 4. Rebar
-        story.append(Spacer(1, 10))
-        story.append(Paragraph("4. Flexural Reinforcement Design", h2))
-        story.append(Paragraph(f"• Ultimate Moment ($M_u$) at column face = {Mu:.2f} {u_moment}", normal))
-        story.append(Paragraph(f"• Required Steel Ratio ($\rho_{{req}}$) = {rho_req:.5f}", normal))
-        story.append(Paragraph(f"• Required Steel Area ($A_{{s,req}}$) = {As_req_disp:.2f} {area_unit}", normal))
-        story.append(Paragraph(f"• Selected Bar: <b>{selected_rebar}</b> (Effective Area = {actual_area:.2f} {area_unit} after {bar_tolerance_pct}% market tolerance)", normal))
-        story.append(Paragraph(f"• <b>Final Design: Provide {num_bars} Nos - {selected_rebar} bars @ {spacing} {spacing_unit} c/c</b>", normal))
+        title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=15, spaceAfter=10, textColor=colors.HexColor('#1E3A8A'))
+        sec_heading = ParagraphStyle('SecHeading', parent=styles['Heading2'], fontSize=12, spaceBefore=8, spaceAfter=6, textColor=colors.HexColor('#0F172A'))
+        subsec_heading = ParagraphStyle('SubSecHeading', parent=styles['Heading3'], fontSize=10, spaceBefore=4, spaceAfter=4, textColor=colors.HexColor('#1E40AF'))
+        normal_p = ParagraphStyle('NormalP', parent=styles['Normal'], fontSize=8.5, leading=11, spaceAfter=4)
+        code_p = ParagraphStyle('CodeP', parent=styles['Normal'], fontSize=8, leading=10, fontName='Courier', spaceAfter=3, textColor=colors.HexColor('#334155'))
+
+        story = []
+
+        story.append(Paragraph("<b>STRUCTURAL & GEOTECHNICAL FOOTING DESIGN CALCULATION REPORT</b>", title_style))
+        story.append(Paragraph(f"Code Standard: <b>{aci_version}</b> | Unit System: <b>{unit_system}</b>", normal_p))
+        story.append(Spacer(1, 6))
+
+        # 1. Loading & Eccentricity Steps
+        story.append(Paragraph("1. Column Loads & Eccentricity Calculations", sec_heading))
+        story.append(Paragraph(f"• Axial Load (P) = <b>{P_unfactored:.2f} {u_force}</b> | Mx = <b>{Mx_unfactored:.2f} {u_moment}</b> | My = <b>{My_unfactored:.2f} {u_moment}</b>", normal_p))
+        story.append(Paragraph(f"• Applied Column Eccentricity: e<sub>x,input</sub> = {ex_input:.2f} {u_len}, e<sub>y,input</sub> = {ey_input:.2f} {u_len}", normal_p))
+        story.append(Paragraph("<b>Step-by-step Eccentricity Derivation:</b>", subsec_heading))
+        story.append(Paragraph(f"  M<sub>x,total</sub> = M<sub>x</sub> + (P × |e<sub>y</sub>|) = {Mx_unfactored:.2f} + ({P_unfactored:.2f} × {abs(ey_input):.2f}) = <b>{Mx_total:.2f} {u_moment}</b>", code_p))
+        story.append(Paragraph(f"  M<sub>y,total</sub> = M<sub>y</sub> + (P × |e<sub>x</sub>|) = {My_unfactored:.2f} + ({P_unfactored:.2f} × {abs(ex_input):.2f}) = <b>{My_total:.2f} {u_moment}</b>", code_p))
+        story.append(Paragraph(f"  e<sub>x,total</sub> = M<sub>y,total</sub> / P = {My_total:.2f} / {P_unfactored:.2f} = <b>{e_x_total:.4f} {u_len}</b>", code_p))
+        story.append(Paragraph(f"  e<sub>y,total</sub> = M<sub>x,total</sub> / P = {Mx_total:.2f} / {P_unfactored:.2f} = <b>{e_y_total:.4f} {u_len}</b>", code_p))
+
+        # 2. Geotechnical
+        story.append(Spacer(1, 4))
+        story.append(Paragraph("2. Geotechnical Bearing Capacity (Multi-Layer Engine)", sec_heading))
+        story.append(Paragraph(f"• Footing Dimensions: B = {B:.2f} {u_len}, L = {L:.2f} {u_len}, D<sub>f</sub> = {Df:.2f} {u_len}", normal_p))
+        story.append(Paragraph("<b>Step-by-step Effective Dimensions & Surcharge:</b>", subsec_heading))
+        story.append(Paragraph(f"  B<sub>eff</sub> = B - 2(e<sub>x,total</sub>) = {B:.2f} - 2({e_x_total:.4f}) = <b>{B_eff:.3f} {u_len}</b>", code_p))
+        story.append(Paragraph(f"  L<sub>eff</sub> = L - 2(e<sub>y,total</sub>) = {L:.2f} - 2({e_y_total:.4f}) = <b>{L_eff:.3f} {u_len}</b>", code_p))
+        story.append(Paragraph(f"  Effective Soil Surcharge q<sub>surcharge</sub> = Σ (γ<sub>i</sub> × h<sub>i</sub>) = <b>{q_surcharge:.2f} {u_stress}</b>", code_p))
+
+        if "c-phi" in geo_input_mode:
+            story.append(Paragraph("<b>Terzaghi / Meyerhof Analytical Equations:</b>", subsec_heading))
+            story.append(Paragraph(f"  N<sub>c</sub> = {Nc:.2f}, N<sub>q</sub> = {Nq:.2f}, N<sub>γ</sub> = {Ng:.2f} (Bearing Layer φ = {target_layer['phi']}°)", code_p))
+            story.append(Paragraph(f"  q<sub>ult</sub> = (c × N<sub>c</sub>) + (q<sub>surcharge</sub> × N<sub>q</sub>) + (0.5 × γ<sub>eff</sub> × B<sub>eff</sub> × N<sub>γ</sub>)", code_p))
+            story.append(Paragraph(f"  q<sub>ult</sub> = ({target_layer['c']} × {Nc:.2f}) + ({q_surcharge:.2f} × {Nq:.2f}) + (0.5 × {target_layer['gamma']} × {B_eff:.2f} × {Ng:.2f}) = <b>{q_ult:.2f} {u_stress}</b>", code_p))
+        else:
+            story.append(Paragraph("<b>Meyerhof / Bowles Empirical SPT N Method:</b>", subsec_heading))
+            story.append(Paragraph(f"  K<sub>d</sub> = min(1.33, 1 + 0.33 × D<sub>f</sub>/B<sub>eff</sub>) = <b>{min(1.33, 1 + 0.33*(Df/B_eff)):.3f}</b>", code_p))
+            story.append(Paragraph(f"  q<sub>ult</sub> = q<sub>allow</sub> × FS = <b>{q_ult:.2f} {u_stress}</b>", code_p))
+
+        story.append(Paragraph(f"  q<sub>allow</sub> = q<sub>ult</sub> / FS = {q_ult:.2f} / {FS} = <b>{q_allow:.2f} {u_stress}</b>", code_p))
+        story.append(Paragraph(f"  q<sub>max,service</sub> = P/A + 6M<sub>x</sub>/(BL²) + 6M<sub>y</sub>/(LB²) = <b>{q_max_service:.2f} {u_stress}</b> {'[PASS]' if q_max_service <= q_allow else '[OVERLOADED]'}", code_p))
+
+        # 3. Structural Shear Calculations
+        story.append(Spacer(1, 4))
+        story.append(Paragraph("3. Structural Shear Verification (ACI 318)", sec_heading))
+        story.append(Paragraph(f"• Factored Load P<sub>u</sub> = 1.4 × P = 1.4 × {P_unfactored:.2f} = <b>{Pu:.2f} {u_force}</b>", normal_p))
+        story.append(Paragraph(f"• Factored Ultimate Pressure q<sub>u</sub> = P<sub>u</sub>/A + 6M<sub>ux</sub>/(BL²) = <b>{qu_factored:.2f} {u_stress}</b>", normal_p))
+        story.append(Paragraph(f"• Effective Depth d<sub>eff</sub> = h - cover = {h_foot:.3f} - {cover:.3f} = <b>{d_eff:.3f} {u_len}</b> | Size Effect λ<sub>s</sub> = <b>{lambda_s:.3f}</b>", normal_p))
+
+        story.append(Paragraph("<b>3.1 Two-Way Punching Shear Calculation:</b>", subsec_heading))
+        story.append(Paragraph(f"  Critical Perimeter b<sub>o</sub> = 2 × [(c<sub>x</sub> + d) + (c<sub>y</sub> + d)] = 2 × [({cx:.2f}+{d_eff:.3f}) + ({cy:.2f}+{d_eff:.3f})] = <b>{bo:.3f} {u_len}</b>", code_p))
+        story.append(Paragraph(f"  Punching Area A<sub>bo</sub> = (c<sub>x</sub> + d)(c<sub>y</sub> + d) = <b>{Area_bo:.3f} {u_len}²</b>", code_p))
+        story.append(Paragraph(f"  V<sub>u,punch</sub> = q<sub>u</sub> × (B × L - A<sub>bo</sub>) = {qu_factored:.2f} × ({B:.2f}×{L:.2f} - {Area_bo:.3f}) = <b>{Vu_punch:.2f} {u_force}</b>", code_p))
+        story.append(Paragraph(f"  v<sub>c,punch</sub> = 0.33 × λ<sub>s</sub> × √(f'c) = 0.33 × {lambda_s:.3f} × √({fc}) = {vc_punch:.3f} MPa", code_p))
+        story.append(Paragraph(f"  φV<sub>c,punch</sub> = φ × v<sub>c</sub> × b<sub>o</sub> × d = <b>{Phi_Vc_punch:.2f} {u_force}</b> {'[PASS]' if Phi_Vc_punch >= Vu_punch else '[FAIL]'}", code_p))
+
+        story.append(Paragraph("<b>3.2 One-Way Beam Shear Calculation:</b>", subsec_heading))
+        story.append(Paragraph(f"  Max Cantilever Arm = (B/2 - c<sub>x</sub>/2 + e<sub>x</sub>) = <b>{cantilever_max:.3f} {u_len}</b>", code_p))
+        story.append(Paragraph(f"  Critical Shear Distance = Cantilever - d = {cantilever_max:.3f} - {d_eff:.3f} = <b>{crit_dist:.3f} {u_len}</b>", code_p))
+        story.append(Paragraph(f"  V<sub>u,oneway</sub> = q<sub>u</sub> × L × Critical Distance = {qu_factored:.2f} × {L:.2f} × {max(0.0, crit_dist):.3f} = <b>{Vu_oneway:.2f} {u_force}</b>", code_p))
+        story.append(Paragraph(f"  φV<sub>c,oneway</sub> = φ × (0.17 × λ<sub>s</sub> × √(f'c)) × L × d = <b>{Phi_Vc_oneway:.2f} {u_force}</b> {'[PASS]' if Phi_Vc_oneway >= Vu_oneway else '[FAIL]'}", code_p))
+
+        # 4. Flexural Design
+        story.append(Spacer(1, 4))
+        story.append(Paragraph("4. Flexural Reinforcement Design", sec_heading))
+        story.append(Paragraph(f"  M<sub>u</sub> = (q<sub>u</sub> × L × Cantilever²) / 2 = ({qu_factored:.2f} × {L:.2f} × {cantilever_max:.3f}²) / 2 = <b>{Mu:.2f} {u_moment}</b>", code_p))
+        story.append(Paragraph(f"  Nominal Resistance Factor R<sub>n</sub> = M<sub>u</sub> / (φ × b × d²) = <b>{Rn:.4f} N/mm²</b>", code_p))
+        story.append(Paragraph(f"  Calculated Steel Ratio ρ = (0.85 × f'c / f<sub>y</sub>) × [1 - √(1 - 2R<sub>n</sub> / (0.85 × f'c))] = <b>{rho:.6f}</b>", code_p))
+        story.append(Paragraph(f"  Required Steel Ratio ρ<sub>req</sub> = max(ρ, ρ<sub>min</sub> = 0.0018) = <b>{rho_req:.6f}</b>", code_p))
+        story.append(Paragraph(f"  Required Steel Area A<sub>s,req</sub> = ρ<sub>req</sub> × L × d = <b>{As_req_disp:.2f} {area_unit}</b>", code_p))
+        story.append(Paragraph(f"  Selected Bar: <b>{selected_rebar}</b> (Effective Area = {actual_area:.2f} {area_unit} with {bar_tolerance_pct}% tolerance)", code_p))
+        story.append(Paragraph(f"  Bar Count Calculation: N = ceil(A<sub>s,req</sub> / A<sub>bar</sub>) = ceil({As_req_disp:.2f} / {actual_area:.2f}) = <b>{num_bars} Bars</b>", code_p))
+        story.append(Paragraph(f"  Spacing Calculation: s = (L - 2×Cover) / (N - 1) = <b>{spacing} {spacing_unit} c/c</b>", code_p))
+        story.append(Paragraph(f"<b>FINAL SPECIFICATION: Provide {num_bars} Nos - {selected_rebar} @ {spacing} {spacing_unit} c/c (Both Ways)</b>", subsec_heading))
 
         # 5. Drawings
-        story.append(Spacer(1, 15))
-        story.append(Paragraph("5. Detailed Drawings", h2))
-        story.append(RLImage(plot1, width=400, height=270))
-        story.append(Spacer(1, 15))
-        story.append(RLImage(plot2, width=400, height=270))
+        story.append(Spacer(1, 8))
+        story.append(Paragraph("5. Structural Detailing Drawings", sec_heading))
+        img_table = Table([
+            [RLImage(plot1, width=250, height=170), RLImage(plot2, width=250, height=170)]
+        ], colWidths=[260, 260])
+        img_table.setStyle(TableStyle([
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ]))
+        story.append(img_table)
 
         doc.build(story)
         buf.seek(0)
         return buf
 
-    # --- Drawing Logic (Same as before) ---
+    # --- Drawing Logic ---
     def draw_cross_section():
         fig, ax = plt.subplots(figsize=(6.5, 4.5))
         y_top = 0.0
@@ -356,12 +387,10 @@ if calc_trigger or "calculated" in st.session_state:
         ax.axvline(0, color="gray", linestyle=":", linewidth=1.0)
         rebar_y_xdir = f_bottom + cover
         
-        # Legend with dynamic bar counts
         ax.plot([-B / 2 + cover, B / 2 - cover], [rebar_y_xdir, rebar_y_xdir], color="red", linewidth=2.0, label=f"X-Bar: {num_bars}-{selected_rebar}")
         x_coords = np.linspace(-B / 2 + cover, B / 2 - cover, num_bars)
-        ax.scatter(x_coords, [rebar_y_xdir + 0.02] * num_bars, color="darkblue", s=15, zorder=5, label=f"Y-Bar: {num_bars}-{selected_rebar} (Dots)")
+        ax.scatter(x_coords, [rebar_y_xdir + 0.02] * num_bars, color="darkblue", s=15, zorder=5, label=f"Y-Bar: {num_bars}-{selected_rebar}")
 
-        # Dimensions
         dim_y = f_bottom - 0.25
         ax.annotate("", xy=(-B / 2, dim_y), xytext=(B / 2, dim_y), arrowprops=dict(arrowstyle="<->", color="black", lw=1.2))
         ax.text(0, dim_y - 0.12, f"B = {B:.2f} {u_len}", ha="center", va="top", fontsize=8, fontweight="bold")
@@ -396,7 +425,6 @@ if calc_trigger or "calculated" in st.session_state:
         for yc in y_rebar_coords:
             ax.plot([-B / 2 + cover, B / 2 - cover], [yc, yc], color="red", linewidth=1.0, alpha=0.7)
 
-        # Dimension cx & cy
         ax.annotate("", xy=(col_x_min, col_y_min + cy + 0.15), xytext=(col_x_min + cx, col_y_min + cy + 0.15), arrowprops=dict(arrowstyle="<->", color="black", lw=1.0))
         ax.text(ex_input, col_y_min + cy + 0.22, f"cx={cx:.2f}{u_len}", ha="center", va="bottom", fontsize=7.5)
 
@@ -446,7 +474,7 @@ if calc_trigger or "calculated" in st.session_state:
         st.download_button(
             label="📄 Download Detailed Calculation Report (PDF)",
             data=pdf_buffer.getvalue(),
-            file_name="Footing_Design_Report.pdf",
+            file_name="Detailed_Footing_Design_Report.pdf",
             mime="application/pdf",
             type="primary",
             use_container_width=True
