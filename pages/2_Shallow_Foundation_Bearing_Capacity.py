@@ -17,14 +17,40 @@ col_in, col_res = st.columns([1, 1.2])
 with col_in:
     # --- 1. Unit System Selection ---
     st.header("1. Select Unit System & Standard")
-    unit_system = st.radio("Unit System", ["SI Units (m, kN, kPa)", "FPS / Imperial (ft, kips, ksf)"])
+    unit_system = st.radio(
+        "Unit System", 
+        [
+            "SI Units (m, kN, kPa)", 
+            "Metric Ton System (m, ton, t/m²)", 
+            "FPS - Kip System (ft, kips, ksf)",
+            "FPS - Ton System (ft, ton, tsf)"
+        ]
+    )
     
     # Define Labels & Units dynamically
-    is_si = (unit_system == "SI Units (m, kN, kPa)")
-    u_len = "m" if is_si else "ft"
-    u_stress = "kPa" if is_si else "ksf"
-    u_gamma = "kN/m³" if is_si else "pcf"
-    u_settle = "mm" if is_si else "in"
+    if unit_system == "SI Units (m, kN, kPa)":
+        u_len, u_stress, u_gamma = "m", "kPa", "kN/m³"
+        gamma_w_val = 9.81
+        c_default, g_dry_def, g_sat_def = 15.0, 18.0, 20.0
+        b_default, df_default, dw_default = 1.5, 1.0, 0.5
+        
+    elif unit_system == "Metric Ton System (m, ton, t/m²)":
+        u_len, u_stress, u_gamma = "m", "t/m²", "t/m³"
+        gamma_w_val = 1.0  # 1 metric ton/m³
+        c_default, g_dry_def, g_sat_def = 1.5, 1.8, 2.0
+        b_default, df_default, dw_default = 1.5, 1.0, 0.5
+        
+    elif unit_system == "FPS - Kip System (ft, kips, ksf)":
+        u_len, u_stress, u_gamma = "ft", "ksf", "pcf"
+        gamma_w_val = 62.4
+        c_default, g_dry_def, g_sat_def = 0.3, 115.0, 125.0
+        b_default, df_default, dw_default = 5.0, 3.0, 2.0
+        
+    else:  # FPS - Ton System (ft, ton, tsf)
+        u_len, u_stress, u_gamma = "ft", "tsf (ton/ft²)", "pcf"
+        gamma_w_val = 62.4  # Output gamma adjustment done in formula
+        c_default, g_dry_def, g_sat_def = 0.15, 115.0, 125.0
+        b_default, df_default, dw_default = 5.0, 3.0, 2.0
 
     method = st.selectbox(
         "Design Method / Standard",
@@ -32,42 +58,51 @@ with col_in:
     )
 
     st.header("2. Soil Parameters")
-    c = st.number_input(f"Cohesion, c ({u_stress})", 0.0, 5000.0, 15.0 if is_si else 0.3)
+    c = st.number_input(f"Cohesion, c ({u_stress})", 0.0, 5000.0, c_default)
     phi = st.number_input("Friction Angle, φ (deg)", 0.0, 45.0, 28.0)
-    gamma_dry = st.number_input(f"Dry/Moist γ ({u_gamma})", 0.0, 300.0, 18.0 if is_si else 115.0)
-    gamma_sat = st.number_input(f"Saturated γ_sat ({u_gamma})", 0.0, 300.0, 20.0 if is_si else 125.0)
+    gamma_dry = st.number_input(f"Dry/Moist γ ({u_gamma})", 0.0, 500.0, g_dry_def)
+    gamma_sat = st.number_input(f"Saturated γ_sat ({u_gamma})", 0.0, 500.0, g_sat_def)
     
     st.header("3. Footing Geometry & Shape")
     footing_shape = st.selectbox("Footing Shape", ["Strip / Continuous", "Square", "Rectangle"])
-    B = st.number_input(f"Width, B ({u_len})", 0.1, 100.0, 1.5 if is_si else 5.0)
+    B = st.number_input(f"Width, B ({u_len})", 0.1, 100.0, b_default)
     
     max_L = 500.0 if footing_shape == "Strip / Continuous" else 100.0
-    default_L = 500.0 if footing_shape == "Strip / Continuous" else (1.5 if is_si else 5.0)
+    default_L = 500.0 if footing_shape == "Strip / Continuous" else b_default
     L = st.number_input(f"Length, L ({u_len})", min_value=0.1, max_value=max_L, value=default_L)
     
-    Df = st.number_input(f"Depth, Df ({u_len})", 0.0, 50.0, 1.0 if is_si else 3.0)
+    Df = st.number_input(f"Depth, Df ({u_len})", 0.0, 50.0, df_default)
     ex = st.number_input(f"Eccentricity e_x ({u_len})", 0.0, B/2, 0.0)
     ey = st.number_input(f"Eccentricity e_y ({u_len})", 0.0, L/2, 0.0)
     
     st.header("4. Water Table & Factor of Safety")
-    Dw = st.number_input(f"Water Table Depth, Dw ({u_len})", 0.0, 100.0, 0.5 if is_si else 2.0)
+    Dw = st.number_input(f"Water Table Depth, Dw ({u_len})", 0.0, 100.0, dw_default)
     FS = st.number_input("Factor of Safety (FS)", 1.0, 10.0, 3.0)
 
 # --- Calculation Engine ---
 B_eff = max(0.01, B - (2 * ex))
 L_eff = max(0.01, L - (2 * ey))
 
-# Water Table Correction
-gamma_w = 9.81 if is_si else 62.4
-if Dw <= Df:
-    q = (Dw * gamma_dry) + ((Df - Dw) * (gamma_sat - gamma_w))
-    gamma_eff = gamma_sat - gamma_w
-elif Df < Dw <= (Df + B_eff):
-    q = Df * gamma_dry
-    gamma_eff = (gamma_sat - gamma_w) + ((Dw - Df) / B_eff) * (gamma_dry - (gamma_sat - gamma_w))
+# Convert pcf to tsf/ft (i.e. divide by 2000) for FPS - Ton System
+if unit_system == "FPS - Ton System (ft, ton, tsf)":
+    g_dry_calc = gamma_dry / 2000.0
+    g_sat_calc = gamma_sat / 2000.0
+    gamma_w_calc = 62.4 / 2000.0
 else:
-    q = Df * gamma_dry
-    gamma_eff = gamma_dry
+    g_dry_calc = gamma_dry
+    g_sat_calc = gamma_sat
+    gamma_w_calc = gamma_w_val
+
+# Water Table Correction
+if Dw <= Df:
+    q = (Dw * g_dry_calc) + ((Df - Dw) * (g_sat_calc - gamma_w_calc))
+    gamma_eff = g_sat_calc - gamma_w_calc
+elif Df < Dw <= (Df + B_eff):
+    q = Df * g_dry_calc
+    gamma_eff = (g_sat_calc - gamma_w_calc) + ((Dw - Df) / B_eff) * (g_dry_calc - (g_sat_calc - gamma_w_calc))
+else:
+    q = Df * g_dry_calc
+    gamma_eff = g_dry_calc
 
 rad_phi = np.radians(phi)
 
@@ -147,7 +182,7 @@ def generate_pdf():
     story.append(Paragraph("<b>1. Input Parameters</b>", h2_style))
     input_data = [
         ["Parameter", "Value", "Unit", "Parameter", "Value", "Unit"],
-        ["Method Used", method, "-", "Unit System", "SI" if is_si else "FPS", "-"],
+        ["Method Used", method, "-", "Unit System", unit_system.split()[0], "-"],
         ["Footing Width (B)", f"{B:.2f}", u_len, "Footing Length (L)", f"{L:.2f}", u_len],
         ["Embedment Depth (Df)", f"{Df:.2f}", u_len, "Water Table Depth (Dw)", f"{Dw:.2f}", u_len],
         ["Cohesion (c)", f"{c:.2f}", u_stress, "Friction Angle (φ)", f"{phi:.1f}", "deg"],
@@ -170,8 +205,8 @@ def generate_pdf():
         f"• L' = L - 2(e_y) = {L:.2f} - 2({ey:.2f}) = <b>{L_eff:.2f} {u_len}</b>",
 
         f"<b>Step 2: Effective Stress & Water Table Correction</b><br/>"
-        f"• Effective Surcharge Load (q) at footing base = <b>{q:.2f} {u_stress}</b><br/>"
-        f"• Unit Weight below foundation (γ_eff) = <b>{gamma_eff:.2f} {u_gamma}</b>",
+        f"• Effective Surcharge Load (q) at footing base = <b>{q:.3f} {u_stress}</b><br/>"
+        f"• Effective Unit Weight below foundation (γ_eff) = <b>{gamma_eff:.4f} {'ton/ft³' if u_stress.startswith('tsf') else u_gamma}</b>",
 
         f"<b>Step 3: Bearing Capacity Factors</b><br/>"
         f"• Nc = <b>{Nc:.3f}</b>, Nq = <b>{Nq:.3f}</b>, Nγ = <b>{Ng:.3f}</b>",
@@ -183,7 +218,7 @@ def generate_pdf():
 
         f"<b>Step 5: Ultimate & Allowable Bearing Capacity</b><br/>"
         f"• q_ult = (c × Nc × sc) + (q × Nq × sq) + (0.5 × γ_eff × B' × Nγ × s_γ)<br/>"
-        f"• q_ult = ({c:.1f}×{Nc:.2f}×{sc:.2f}) + ({q:.1f}×{Nq:.2f}×{sq:.2f}) + (0.5×{gamma_eff:.1f}×{B_eff:.2f}×{Ng:.2f}×{sg:.2f})<br/>"
+        f"• q_ult = ({c:.2f}×{Nc:.2f}×{sc:.2f}) + ({q:.3f}×{Nq:.2f}×{sq:.2f}) + (0.5×{gamma_eff:.4f}×{B_eff:.2f}×{Ng:.2f}×{sg:.2f})<br/>"
         f"• <b>Ultimate Capacity (q_ult) = {q_ult:.2f} {u_stress}</b><br/>"
         f"• Allowable Capacity (q_allow) = q_ult / Factor of Safety ({FS})<br/>"
         f"• <b>Allowable Capacity (q_allow) = {q_allow:.2f} {u_stress}</b>"
@@ -218,6 +253,6 @@ st.markdown("---")
 st.download_button(
     label="📥 Download Detailed Report with Step-by-Step Calculations (PDF)",
     data=generate_pdf(),
-    file_name=f"bearing_capacity_detailed_{'SI' if is_si else 'FPS'}.pdf",
+    file_name=f"bearing_capacity_detailed_{u_stress.split()[0]}.pdf",
     mime="application/pdf"
 )
