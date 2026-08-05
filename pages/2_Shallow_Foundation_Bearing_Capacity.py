@@ -126,6 +126,12 @@ with col_in:
     selected_rebar = col_rb.selectbox("Select Reinforcement Bar", list(rebar_options.keys()))
     bar_tolerance_pct = col_tol.number_input("Market Bar Size Reduction (%)", 0.0, 15.0, 0.0, step=0.5)
 
+    # Clear Concrete Cover set strictly to 3 inches (0.075 m or 3.0 inches)
+    clear_cover_input = st.selectbox("Clear Concrete Cover", ["3.0 inches (75 mm) - Standard Footing Cover"], index=0)
+    
+    # Hook Type Selection for Footing Reinforcement Detail
+    hook_type = st.radio("Rebar End Hook Type", ["None (Straight Bar)", "90-Degree Standard Hook", "180-Degree Standard Hook"])
+
     nom_area = rebar_options[selected_rebar]["area"]
     actual_area = nom_area * (1.0 - (bar_tolerance_pct / 100.0))
     is_selected_metric = rebar_options[selected_rebar]["is_metric"]
@@ -202,6 +208,7 @@ if calc_trigger or "calculated" in st.session_state:
     Mux_total = 1.4 * Mx_total
     qu_factored = (Pu / footing_area) + (6 * Mux_total / (B * (L**2)))
 
+    # 3 inches (0.075 m or 3/12 ft) explicit cover selection
     cover = 0.075 if not is_imperial else (3.0 / 12.0)
     d_eff = h_foot - cover
 
@@ -261,7 +268,7 @@ if calc_trigger or "calculated" in st.session_state:
         area_unit = "in²"
         spacing_unit = "in"
         total_len = L * 12 if is_imperial else (L * 1000) / 25.4
-        clear_cov = 3.0
+        clear_cov = 3.0 # 3 inches explicit cover
 
     num_bars = int(np.ceil(As_req_disp / actual_area))
     num_bars = max(2, num_bars)
@@ -282,7 +289,8 @@ if calc_trigger or "calculated" in st.session_state:
         story = []
 
         story.append(Paragraph("<b>STRUCTURAL & GEOTECHNICAL FOOTING DESIGN CALCULATION REPORT</b>", title_style))
-        story.append(Paragraph(f"Code Standard: <b>{aci_version}</b> | Unit System: <b>{unit_system}</b>", normal_p))
+        story.append(Paragraph(f"Code Standard: <b>{aci_version}</b> | Unit System: <b>{unit_system}</b> | Clear Cover: <b>3.0 in (75 mm)</b>", normal_p))
+        story.append(Paragraph(f"Reinforcement Hook Type: <b>{hook_type}</b>", normal_p))
         story.append(Spacer(1, 6))
 
         # 1. Loading & Eccentricity Steps
@@ -345,10 +353,10 @@ if calc_trigger or "calculated" in st.session_state:
         story.append(Paragraph(f"  Calculated Steel Ratio ρ = (0.85 × f'c / f<sub>y</sub>) × [1 - √(1 - 2R<sub>n</sub> / (0.85 × f'c))] = <b>{rho:.6f}</b>", code_p))
         story.append(Paragraph(f"  Required Steel Ratio ρ<sub>req</sub> = max(ρ, ρ<sub>min</sub> = 0.0018) = <b>{rho_req:.6f}</b>", code_p))
         story.append(Paragraph(f"  Required Steel Area A<sub>s,req</sub> = ρ<sub>req</sub> × L × d = <b>{As_req_disp:.2f} {area_unit}</b>", code_p))
-        story.append(Paragraph(f"  Selected Bar: <b>{selected_rebar}</b> (Effective Area = {actual_area:.2f} {area_unit} with {bar_tolerance_pct}% tolerance)", code_p))
+        story.append(Paragraph(f"  Selected Bar: <b>{selected_rebar}</b> with <b>{hook_type}</b> (Effective Area = {actual_area:.2f} {area_unit} with {bar_tolerance_pct}% tolerance)", code_p))
         story.append(Paragraph(f"  Bar Count Calculation: N = ceil(A<sub>s,req</sub> / A<sub>bar</sub>) = ceil({As_req_disp:.2f} / {actual_area:.2f}) = <b>{num_bars} Bars</b>", code_p))
-        story.append(Paragraph(f"  Spacing Calculation: s = (L - 2×Cover) / (N - 1) = <b>{spacing} {spacing_unit} c/c</b>", code_p))
-        story.append(Paragraph(f"<b>FINAL SPECIFICATION: Provide {num_bars} Nos - {selected_rebar} @ {spacing} {spacing_unit} c/c (Both Ways)</b>", subsec_heading))
+        story.append(Paragraph(f"  Spacing Calculation: s = (L - 2×Cover) / (N - 1) = <b>{spacing} {spacing_unit} c/c (Cover = 3.0 in)</b>", code_p))
+        story.append(Paragraph(f"<b>FINAL SPECIFICATION: Provide {num_bars} Nos - {selected_rebar} with {hook_type} @ {spacing} {spacing_unit} c/c (Both Ways)</b>", subsec_heading))
 
         # 5. Drawings
         story.append(Spacer(1, 8))
@@ -366,7 +374,7 @@ if calc_trigger or "calculated" in st.session_state:
         buf.seek(0)
         return buf
 
-    # --- Drawing Logic ---
+    # --- Drawing Logic with Hooks ---
     def draw_cross_section():
         fig, ax = plt.subplots(figsize=(6.5, 4.5))
         y_top = 0.0
@@ -387,20 +395,35 @@ if calc_trigger or "calculated" in st.session_state:
         ax.axvline(0, color="gray", linestyle=":", linewidth=1.0)
         rebar_y_xdir = f_bottom + cover
         
-        ax.plot([-B / 2 + cover, B / 2 - cover], [rebar_y_xdir, rebar_y_xdir], color="red", linewidth=2.0, label=f"X-Bar: {num_bars}-{selected_rebar}")
-        x_coords = np.linspace(-B / 2 + cover, B / 2 - cover, num_bars)
-        ax.scatter(x_coords, [rebar_y_xdir + 0.02] * num_bars, color="darkblue", s=15, zorder=5, label=f"Y-Bar: {num_bars}-{selected_rebar}")
+        # Draw Main Rebar Line
+        left_x = -B / 2 + cover
+        right_x = B / 2 - cover
+        ax.plot([left_x, right_x], [rebar_y_xdir, rebar_y_xdir], color="red", linewidth=2.0, label=f"Bar: {num_bars}-{selected_rebar}")
+        
+        # Render Hooks if selected
+        hook_len = 0.12 if not is_imperial else 0.4
+        if "90-Degree" in hook_type:
+            ax.plot([left_x, left_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+            ax.plot([right_x, right_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+        elif "180-Degree" in hook_type:
+            ax.plot([left_x, left_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+            ax.plot([left_x, left_x - 0.05], [rebar_y_xdir + hook_len, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+            ax.plot([right_x, right_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+            ax.plot([right_x, right_x + 0.05], [rebar_y_xdir + hook_len, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+
+        x_coords = np.linspace(left_x, right_x, num_bars)
+        ax.scatter(x_coords, [rebar_y_xdir + 0.02] * num_bars, color="darkblue", s=15, zorder=5, label=f"Cross-Bars")
 
         dim_y = f_bottom - 0.25
         ax.annotate("", xy=(-B / 2, dim_y), xytext=(B / 2, dim_y), arrowprops=dict(arrowstyle="<->", color="black", lw=1.2))
-        ax.text(0, dim_y - 0.12, f"B = {B:.2f} {u_len}", ha="center", va="top", fontsize=8, fontweight="bold")
+        ax.text(0, dim_y - 0.12, f"B = {B:.2f} {u_len} (Cover: 3 in)", ha="center", va="top", fontsize=8, fontweight="bold")
         
         ax.set_xlim(-B / 2 - 1.0, B / 2 + 1.0)
         ax.set_ylim(f_bottom - 0.7, 0.5)
         ax.set_aspect("equal")
         ax.axis("off")
         ax.legend(loc="upper right", bbox_to_anchor=(1.38, 1.0), fontsize=6.5)
-        plt.title("Footing Elevation Section View", fontsize=9, fontweight="bold")
+        plt.title(f"Footing Elevation Section ({hook_type})", fontsize=9, fontweight="bold")
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -435,7 +458,7 @@ if calc_trigger or "calculated" in st.session_state:
         ax.set_ylim(-L / 2 - 0.8, L / 2 + 0.8)
         ax.set_aspect("equal")
         ax.axis("off")
-        plt.title("Footing Structural Top Plan View", fontsize=9, fontweight="bold")
+        plt.title("Footing Structural Top Plan View (Cover = 3 in)", fontsize=9, fontweight="bold")
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -463,10 +486,10 @@ if calc_trigger or "calculated" in st.session_state:
         s2.metric("One-Way Shear", f"{Vu_oneway:.1f} / {Phi_Vc_oneway:.1f}", delta="✅ PASS" if Phi_Vc_oneway >= Vu_oneway else "❌ FAIL")
 
         st.subheader("3. Reinforcement Arrangement")
-        st.markdown(f"**Design Recommendation:** Provide **{num_bars} Nos - {selected_rebar}** bars @ **{spacing} {spacing_unit} c/c** (Both Directions)")
+        st.markdown(f"**Design Recommendation:** Provide **{num_bars} Nos - {selected_rebar}** with **{hook_type}** @ **{spacing} {spacing_unit} c/c** (Both Directions, Cover = 3 in)")
 
-        st.image(sec_img_buf, caption="Cross-Section Elevation with Rebar Counts")
-        st.image(plan_img_buf, caption="Footing Plan Top View with Column Dimensions")
+        st.image(sec_img_buf, caption=f"Cross-Section Elevation ({hook_type}, 3 in Cover)")
+        st.image(plan_img_buf, caption="Footing Plan Top View")
 
         # --- PDF Download Button ---
         st.markdown("---")
