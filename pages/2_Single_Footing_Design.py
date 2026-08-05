@@ -43,6 +43,7 @@ with col_in:
     u_moment = "kip-ft" if (is_imperial and not is_ton) else ("ton-m" if is_ton else "kN-m")
     u_stress = "tsf" if (is_imperial and is_ton) else ("ksf" if is_imperial else ("t/m²" if is_ton else "kPa"))
     u_gamma = "pcf" if is_imperial else ("t/m³" if is_ton else "kN/m³")
+    u_rebar = "in" if is_imperial else "mm"  # NameError မဖြစ်စေရန် Variable ကြိုတင် define လုပ်ထားခြင်း
 
     geo_input_mode = st.radio(
         "Geotechnical Calculation Method",
@@ -388,7 +389,10 @@ if calc_trigger or "calculated" in st.session_state:
         ax.set_ylim(-L / 2 - 0.8, L / 2 + 0.8)
         ax.set_aspect("equal")
         ax.axis("off")
-        plt.title(f"Footing Structural Top Plan View (Cover = {cover * (12 if is_imperial else 1000):.1f} {u_rebar})", fontsize=9, fontweight="bold")
+
+        # Cover Label formatting safely handled
+        cover_val_disp = cover * (12.0 if is_imperial else 1000.0)
+        plt.title(f"Footing Structural Top Plan View (Cover = {cover_val_disp:.1f} {u_rebar})", fontsize=9, fontweight="bold")
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -397,7 +401,7 @@ if calc_trigger or "calculated" in st.session_state:
         plt.close()
         return buf
 
-    # --- Updated PDF Report Generator Matching User Screenshots Exactly ---
+    # --- PDF Report Generator ---
     def generate_pdf_report(sec_buf, plan_buf):
         pdf_buf = io.BytesIO()
         doc = SimpleDocTemplate(
@@ -405,14 +409,13 @@ if calc_trigger or "calculated" in st.session_state:
         )
         styles = getSampleStyleSheet()
 
-        # Custom Typography Styles matching screenshots
         main_title_style = ParagraphStyle(
             'MainTitle',
             parent=styles['Heading1'],
             fontName='Helvetica-Bold',
             fontSize=16,
             leading=20,
-            textColor=colors.HexColor("#1A365D"),  # Dark Navy Blue
+            textColor=colors.HexColor("#1A365D"),
             spaceAfter=8
         )
         sub_title_style = ParagraphStyle(
@@ -440,7 +443,7 @@ if calc_trigger or "calculated" in st.session_state:
             fontName='Helvetica-BoldOblique',
             fontSize=10,
             leading=14,
-            textColor=colors.HexColor("#2B6CB0"),  # Bright Blue
+            textColor=colors.HexColor("#2B6CB0"),
             spaceBefore=6,
             spaceAfter=4
         )
