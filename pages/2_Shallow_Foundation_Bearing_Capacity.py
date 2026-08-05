@@ -51,7 +51,12 @@ with col_in:
         st.header("3. Footing Geometry & Shape")
         footing_shape = st.selectbox("Footing Shape", ["Strip / Continuous", "Square", "Rectangle", "Circular"])
         B = st.number_input("Width / Diameter, B (m)", 0.1, 20.0, 1.5)
-        L = st.number_input("Length, L (m)", 0.1, 20.0, 1.5 if footing_shape != "Strip / Continuous" else 100.0)
+        L = st.number_input(
+    "Length, L (m)", 
+    min_value=0.1, 
+    max_value=100.0, 
+    value=1.5 if footing_shape != "Strip / Continuous" else 100.0
+)
         Df = st.number_input("Depth, Df (m)", 0.0, 10.0, 1.0)
         ex = st.number_input("Eccentricity e_x (m)", 0.0, B/2, 0.0)
         ey = st.number_input("Eccentricity e_y (m)", 0.0, L/2, 0.0)
