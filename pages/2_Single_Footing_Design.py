@@ -43,7 +43,7 @@ with col_in:
     u_moment = "kip-ft" if (is_imperial and not is_ton) else ("ton-m" if is_ton else "kN-m")
     u_stress = "tsf" if (is_imperial and is_ton) else ("ksf" if is_imperial else ("t/m²" if is_ton else "kPa"))
     u_gamma = "pcf" if is_imperial else ("t/m³" if is_ton else "kN/m³")
-    u_rebar = "in" if is_imperial else "mm"  # NameError မဖြစ်စေရန် Variable ကြိုတင် define လုပ်ထားခြင်း
+    u_rebar = "in" if is_imperial else "mm"
 
     geo_input_mode = st.radio(
         "Geotechnical Calculation Method",
@@ -129,18 +129,18 @@ with col_in:
 
     if "Metric" in rebar_system:
         rebar_options = {
-            "16 mm": {"dia": 16.0, "area": 201.06, "is_metric": True},
-            "18 mm": {"dia": 18.0, "area": 254.47, "is_metric": True},
-            "20 mm": {"dia": 20.0, "area": 314.16, "is_metric": True},
-            "22 mm": {"dia": 22.0, "area": 380.13, "is_metric": True},
-            "25 mm": {"dia": 25.0, "area": 490.87, "is_metric": True},
+            "16 mm": {"dia": 16.0, "area_mm2": 201.06, "area_in2": 0.3116, "is_metric": True},
+            "18 mm": {"dia": 18.0, "area_mm2": 254.47, "area_in2": 0.3944, "is_metric": True},
+            "20 mm": {"dia": 20.0, "area_mm2": 314.16, "area_in2": 0.4869, "is_metric": True},
+            "22 mm": {"dia": 22.0, "area_mm2": 380.13, "area_in2": 0.5892, "is_metric": True},
+            "25 mm": {"dia": 25.0, "area_mm2": 490.87, "area_in2": 0.7608, "is_metric": True},
         }
     else:
         rebar_options = {
-            "#5 (0.625in)": {"dia": 0.625, "area": 0.31, "is_metric": False},
-            "#6 (0.75in)": {"dia": 0.75, "area": 0.44, "is_metric": False},
-            "#7 (0.875in)": {"dia": 0.875, "area": 0.60, "is_metric": False},
-            "#8 (1.0in)": {"dia": 1.0, "area": 0.79, "is_metric": False},
+            "#5 (0.625in)": {"dia": 0.625, "area_mm2": 200.0, "area_in2": 0.31, "is_metric": False},
+            "#6 (0.75in)": {"dia": 0.75, "area_mm2": 284.0, "area_in2": 0.44, "is_metric": False},
+            "#7 (0.875in)": {"dia": 0.875, "area_mm2": 387.0, "area_in2": 0.60, "is_metric": False},
+            "#8 (1.0in)": {"dia": 1.0, "area_mm2": 510.0, "area_in2": 0.79, "is_metric": False},
         }
 
     col_rb, col_tol = st.columns(2)
@@ -150,9 +150,9 @@ with col_in:
     clear_cover_input = st.selectbox("Clear Concrete Cover", ["3.0 inches (75 mm) - Standard Footing Cover"], index=0)
     hook_type = st.radio("Rebar End Hook Type", ["None (Straight Bar)", "90-Degree Standard Hook", "180-Degree Standard Hook"])
 
-    nom_area = rebar_options[selected_rebar]["area"]
-    actual_area = nom_area * (1.0 - (bar_tolerance_pct / 100.0))
     is_selected_metric = rebar_options[selected_rebar]["is_metric"]
+    nom_area = rebar_options[selected_rebar]["area_in2"] if is_imperial else rebar_options[selected_rebar]["area_mm2"]
+    actual_area = nom_area * (1.0 - (bar_tolerance_pct / 100.0))
 
     calc_trigger = st.button("🚀 Calculate Single Footing Design", type="primary", use_container_width=True)
 
@@ -268,11 +268,10 @@ if calc_trigger or "calculated" in st.session_state:
         Phi_Vc_punch = ((phi_s * vc_punch * (bo * 12) * (d_eff * 12)) / 1000.0) * force_mult
         Phi_Vc_oneway = ((phi_s * vc_oneway * (L * 12) * (d_eff * 12)) / 1000.0) * force_mult
 
-    # Reinforcement Calculation
+    # Reinforcement Calculation Corrected
     Mu_x = (qu_factored * L * (cantilever_x**2)) / 2
     Mu_y = (qu_factored * B * (cantilever_y**2)) / 2
 
-    # Flexural steel derivation steps
     if not is_imperial:
         w_mm, d_mm = L * 1000, d_eff * 1000
         Mu_Nmm = Mu_x * 1e6 * (9.81 if is_ton else 1.0)
@@ -284,17 +283,19 @@ if calc_trigger or "calculated" in st.session_state:
         clear_c = 75.0
         unit_as = "mm²"
         unit_rn = "N/mm²"
+        spacing_unit = "mm"
     else:
         w_in, d_in = L * 12, d_eff * 12
         Mu_inlbs = Mu_x * 12000 * (2.0 if is_ton else 1.0)
         Rn_val = Mu_inlbs / (0.9 * w_in * (d_in**2))
         rho_calc = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn_val) / (0.85 * fc))))
         rho_req = max(rho_calc, 0.0018)
-        As_req = (rho_req * w_in * d_in) * 645.16 if is_selected_metric else (rho_req * w_in * d_in)
+        As_req = rho_req * w_in * d_in
         total_span = L * 12
         clear_c = 3.0
-        unit_as = "mm²" if is_selected_metric else "in²"
+        unit_as = "in²"
         unit_rn = "psi"
+        spacing_unit = "in"
 
     n_bars = int(np.ceil(As_req / actual_area))
     num_bars_x = max(2, n_bars)
@@ -302,7 +303,6 @@ if calc_trigger or "calculated" in st.session_state:
 
     num_bars_y = num_bars_x
     spacing_y = spacing_x
-    spacing_unit = "mm" if is_selected_metric else "in"
 
     # --- Drawing Logic ---
     def draw_cross_section():
@@ -390,7 +390,6 @@ if calc_trigger or "calculated" in st.session_state:
         ax.set_aspect("equal")
         ax.axis("off")
 
-        # Cover Label formatting safely handled
         cover_val_disp = cover * (12.0 if is_imperial else 1000.0)
         plt.title(f"Footing Structural Top Plan View (Cover = {cover_val_disp:.1f} {u_rebar})", fontsize=9, fontweight="bold")
         plt.tight_layout()
@@ -497,26 +496,30 @@ if calc_trigger or "calculated" in st.session_state:
         )
         story.append(Paragraph(math_1, math_code_style))
 
-        # 2. Geotechnical Bearing Capacity
-        story.append(Paragraph("2. Geotechnical Bearing Capacity (Multi-Layer Engine)", h1_sec_style))
+        # 2. Geotechnical Bearing Capacity (Fixed Logic)
+        story.append(Paragraph("2. Geotechnical Bearing Capacity", h1_sec_style))
         story.append(Paragraph(f"• Footing Dimensions: B = {B:.2f} {u_len}, L = {L:.2f} {u_len}, D<sub>f</sub> = {Df:.2f} {u_len}", bullet_style))
+        story.append(Paragraph(f"• Selected Calculation Method: <b>{geo_input_mode}</b>", bullet_style))
         
-        story.append(Paragraph("Step-by-step Effective Dimensions & Surcharge:", sub_heading_style))
-        math_2a = (
-            f"B<sub>eff</sub> = B - 2(e<sub>x,total</sub>) = {B:.2f} - 2({e_x_total:.4f}) = {B_eff:.3f} {u_len}<br/>"
-            f"L<sub>eff</sub> = L - 2(e<sub>y,total</sub>) = {L:.2f} - 2({e_y_total:.4f}) = {L_eff:.3f} {u_len}<br/>"
-            f"Effective Soil Surcharge q<sub>surcharge</sub> = Σ (γ<sub>i</sub> × h<sub>i</sub>) = {q_surcharge:.2f} {u_stress}"
-        )
-        story.append(Paragraph(math_2a, math_code_style))
-
-        story.append(Paragraph("Terzaghi / Meyerhof Analytical Equations:", sub_heading_style))
-        math_2b = (
-            f"N<sub>c</sub> = {Nc:.2f}, N<sub>q</sub> = {Nq:.2f}, N<sub>γ</sub> = {Ng:.2f} (Bearing Layer φ = {phi_val:.1f}°)<br/>"
-            f"q<sub>ult</sub> = (c × N<sub>c</sub>) + (q<sub>surcharge</sub> × N<sub>q</sub>) + (0.5 × γ<sub>eff</sub> × B<sub>eff</sub> × N<sub>γ</sub>)<br/>"
-            f"q<sub>ult</sub> = ({c_val:.1f} × {Nc:.2f}) + ({q_surcharge:.2f} × {Nq:.2f}) + (0.5 × {target_layer['gamma']:.1f} × {B_eff:.2f} × {Ng:.2f}) = {q_ult:.2f} {u_stress}<br/>"
-            f"q<sub>allow</sub> = q<sub>ult</sub> / FS = {q_ult:.2f} / {FS:.1f} = {q_allow:.2f} {u_stress}<br/>"
-            f"q<sub>max,service</sub> = P/A + 6M<sub>x</sub>/(BL²) + 6M<sub>y</sub>/(LB²) = {q_max_service:.2f} {u_stress} [{'PASS' if q_max_service <= q_allow else 'FAIL'}]"
-        )
+        if "Direct" in geo_input_mode:
+            math_2b = (
+                f"q<sub>allow,direct</sub> = {q_allow:.2f} {u_stress}<br/>"
+                f"q<sub>max,service</sub> = P/A + 6M<sub>x</sub>/(BL²) + 6M<sub>y</sub>/(LB²) = {q_max_service:.2f} {u_stress} [{'PASS' if q_max_service <= q_allow else 'FAIL'}]"
+            )
+        elif "SPT" in geo_input_mode:
+            math_2b = (
+                f"N-value = {target_layer['N']}, K<sub>d</sub> = {Kd:.2f}<br/>"
+                f"q<sub>allow</sub> = {q_allow:.2f} {u_stress}<br/>"
+                f"q<sub>max,service</sub> = {q_max_service:.2f} {u_stress} [{'PASS' if q_max_service <= q_allow else 'FAIL'}]"
+            )
+        else:
+            math_2b = (
+                f"N<sub>c</sub> = {Nc:.2f}, N<sub>q</sub> = {Nq:.2f}, N<sub>γ</sub> = {Ng:.2f} (Bearing Layer φ = {phi_val:.1f}°)<br/>"
+                f"q<sub>ult</sub> = (c × N<sub>c</sub>) + (q<sub>surcharge</sub> × N<sub>q</sub>) + (0.5 × γ<sub>eff</sub> × B<sub>eff</sub> × N<sub>γ</sub>)<br/>"
+                f"q<sub>ult</sub> = ({c_val:.1f} × {Nc:.2f}) + ({q_surcharge:.2f} × {Nq:.2f}) + (0.5 × {target_layer['gamma']:.1f} × {B_eff:.2f} × {Ng:.2f}) = {q_ult:.2f} {u_stress}<br/>"
+                f"q<sub>allow</sub> = q<sub>ult</sub> / FS = {q_ult:.2f} / {FS:.1f} = {q_allow:.2f} {u_stress}<br/>"
+                f"q<sub>max,service</sub> = P/A + 6M<sub>x</sub>/(BL²) + 6M<sub>y</sub>/(LB²) = {q_max_service:.2f} {u_stress} [{'PASS' if q_max_service <= q_allow else 'FAIL'}]"
+            )
         story.append(Paragraph(math_2b, math_code_style))
 
         # 3. Structural Shear Verification
@@ -544,7 +547,7 @@ if calc_trigger or "calculated" in st.session_state:
         )
         story.append(Paragraph(math_3b, math_code_style))
 
-        # 4. Flexural Reinforcement Design
+        # 4. Flexural Reinforcement Design (Fixed Logic)
         story.append(Paragraph("4. Flexural Reinforcement Design", h1_sec_style))
         math_4a = (
             f"M<sub>u</sub> = (q<sub>u</sub> × L × Cantilever²) / 2 = ({qu_factored:.2f} × {L:.2f} × {cantilever_x:.2f}²) / 2 = {Mu_x:.2f} {u_moment}<br/>"
