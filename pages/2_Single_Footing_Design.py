@@ -113,8 +113,7 @@ with col_in:
         cx = col_cx.number_input(f"Column Size cx ({u_len})", 0.1, 5.0, 0.4 if not is_imperial else 1.0)
         cy = col_cy.number_input(f"Column Size cy ({u_len})", 0.1, 5.0, 0.4 if not is_imperial else 1.25)
 
-    # Embedment depth Df is defined as depth to bottom of footing
-    Df = st.number_input(f"Embedment Depth Df (to Bottom of Footing) ({u_len})", 0.0, 20.0, 1.5 if not is_imperial else 5.0)
+    Df = st.number_input(f"Embedment Depth Df (to Bottom of Footing) ({u_len})", 0.0, 20.0, 1.5 if not is_imperial else 3.5)
     h_foot = st.number_input(f"Footing Thickness h ({u_len})", 0.1, 5.0, 0.45 if not is_imperial else 1.5)
     Dw = st.number_input(f"Water Table Depth Dw ({u_len})", 0.0, 50.0, 0.8 if not is_imperial else 2.5)
 
@@ -166,7 +165,7 @@ if calc_trigger or "calculated" in st.session_state:
     e_x_total = My_total / P_unfactored if P_unfactored > 0 else 0.0
     e_y_total = Mx_total / P_unfactored if P_unfactored > 0 else 0.0
 
-    # 2. Multi-Layer Surcharge Engine (Df is depth to base level)
+    # 2. Multi-Layer Surcharge Engine
     q_surcharge = 0.0
     current_depth = 0.0
     gamma_w = 62.4 if is_imperial else (1.0 if is_ton else 9.81)
@@ -192,9 +191,12 @@ if calc_trigger or "calculated" in st.session_state:
     L_eff = max(0.1, L - 2 * e_y_total)
 
     # 3. Geotechnical Capacity Calculation
+    c_val = target_layer["c"]
+    phi_val = target_layer["phi"]
     if "Direct" in geo_input_mode:
         q_allow = q_allow_direct
         q_ult = q_allow * FS
+        Nc, Nq, Ng = 0.0, 0.0, 0.0
     elif "SPT" in geo_input_mode:
         N_val = target_layer["N"]
         Kd = min(1.33, 1 + 0.33 * (Df / B_eff))
@@ -203,9 +205,8 @@ if calc_trigger or "calculated" in st.session_state:
         else:
             q_allow = (N_val * 1.2 if is_ton else N_val / 0.05) * Kd
         q_ult = q_allow * FS
+        Nc, Nq, Ng = 0.0, 0.0, 0.0
     else:
-        c_val = target_layer["c"]
-        phi_val = target_layer["phi"]
         rad_phi = np.radians(phi_val)
         if phi_val > 0:
             Nq = np.exp(np.pi * np.tan(rad_phi)) * (np.tan(np.radians(45 + phi_val / 2))) ** 2
@@ -270,56 +271,53 @@ if calc_trigger or "calculated" in st.session_state:
     Mu_x = (qu_factored * L * (cantilever_x**2)) / 2
     Mu_y = (qu_factored * B * (cantilever_y**2)) / 2
 
-    def calc_rebar_qty(M_val, width_len):
-        if not is_imperial:
-            w_mm, d_mm = width_len * 1000, d_eff * 1000
-            Mu_Nmm = M_val * 1e6 * (9.81 if is_ton else 1.0)
-            Rn = Mu_Nmm / (0.9 * w_mm * (d_mm**2))
-            rho = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn) / (0.85 * fc))))
-            rho_req = max(rho, 0.0018)
-            As_req = rho_req * w_mm * d_mm
-            total_span = width_len * 1000
-            clear_c = 75.0
-        else:
-            w_in, d_in = width_len * 12, d_eff * 12
-            Mu_inlbs = M_val * 12000 * (2.0 if is_ton else 1.0)
-            Rn = Mu_inlbs / (0.9 * w_in * (d_in**2))
-            rho = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn) / (0.85 * fc))))
-            rho_req = max(rho, 0.0018)
-            As_req = (rho_req * w_in * d_in) * 645.16 if is_selected_metric else (rho_req * w_in * d_in)
-            total_span = width_len * 12
-            clear_c = 3.0
+    # Flexural steel derivation steps
+    if not is_imperial:
+        w_mm, d_mm = L * 1000, d_eff * 1000
+        Mu_Nmm = Mu_x * 1e6 * (9.81 if is_ton else 1.0)
+        Rn_val = Mu_Nmm / (0.9 * w_mm * (d_mm**2))
+        rho_calc = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn_val) / (0.85 * fc))))
+        rho_req = max(rho_calc, 0.0018)
+        As_req = rho_req * w_mm * d_mm
+        total_span = L * 1000
+        clear_c = 75.0
+        unit_as = "mm²"
+        unit_rn = "N/mm²"
+    else:
+        w_in, d_in = L * 12, d_eff * 12
+        Mu_inlbs = Mu_x * 12000 * (2.0 if is_ton else 1.0)
+        Rn_val = Mu_inlbs / (0.9 * w_in * (d_in**2))
+        rho_calc = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn_val) / (0.85 * fc))))
+        rho_req = max(rho_calc, 0.0018)
+        As_req = (rho_req * w_in * d_in) * 645.16 if is_selected_metric else (rho_req * w_in * d_in)
+        total_span = L * 12
+        clear_c = 3.0
+        unit_as = "mm²" if is_selected_metric else "in²"
+        unit_rn = "psi"
 
-        As_disp = As_req
-        n_bars = int(np.ceil(As_disp / actual_area))
-        n_bars = max(2, n_bars)
-        sp = round((total_span - (2 * clear_c)) / max(1, (n_bars - 1)), 1)
-        return n_bars, sp
+    n_bars = int(np.ceil(As_req / actual_area))
+    num_bars_x = max(2, n_bars)
+    spacing_x = round((total_span - (2 * clear_c)) / max(1, (num_bars_x - 1)), 1)
 
-    num_bars_x, spacing_x = calc_rebar_qty(Mu_x, L)
-    num_bars_y, spacing_y = calc_rebar_qty(Mu_y, B)
+    num_bars_y = num_bars_x
+    spacing_y = spacing_x
     spacing_unit = "mm" if is_selected_metric else "in"
 
-    # --- Drawing Logic (Corrected Elevation Geometry) ---
+    # --- Drawing Logic ---
     def draw_cross_section():
         fig, ax = plt.subplots(figsize=(6.5, 4.5))
 
-        # Df is measured from Ground Surface (y=0) to Footing Base (y = -Df)
         footing_bottom_y = -Df
         footing_top_y = -Df + h_foot
 
-        # Ground fill
         ax.fill_between([-B / 2 - 1.2, B / 2 + 1.2], [0, 0], [footing_bottom_y - 0.5, footing_bottom_y - 0.5], color="#E5D3B3", alpha=0.5)
         ax.axhline(0, color="k", linestyle="--", linewidth=1, label="Ground Level (GL)")
 
-        # Water Table Line
         if Dw <= (Df + 0.5):
             ax.axhline(-Dw, color="blue", linestyle="-.", linewidth=1.5, label=f"Water Table (Dw={Dw:.2f}{u_len})")
 
-        # Footing Patch: Base at y = -Df, Top at y = -Df + h_foot
         ax.add_patch(plt.Rectangle((-B / 2, footing_bottom_y), B, h_foot, facecolor="#9CA3AF", edgecolor="black", linewidth=1.5, label="Footing"))
 
-        # Column Patch: Starts from Footing Top Level (-Df + h_foot) up to above Ground Level (+0.3)
         col_x_start = ex_input - (cx / 2.0)
         col_height = (Df - h_foot) + 0.3
         if col_shape == "Circular":
@@ -327,7 +325,6 @@ if calc_trigger or "calculated" in st.session_state:
         else:
             ax.add_patch(plt.Rectangle((col_x_start, footing_top_y), cx, col_height, facecolor="#4B5563", edgecolor="black", linewidth=1.5, label="Column"))
 
-        # Rebar Layer (Cover measured from footing bottom)
         rebar_y_xdir = footing_bottom_y + cover
         left_x = -B / 2 + cover
         right_x = B / 2 - cover
@@ -354,7 +351,7 @@ if calc_trigger or "calculated" in st.session_state:
         ax.set_aspect("equal")
         ax.axis("off")
         ax.legend(loc="upper right", fontsize=6.0)
-        plt.title("Footing Elevation Section (Df = Depth to Base)", fontsize=9, fontweight="bold")
+        plt.title(f"Footing Elevation Section ({hook_type})", fontsize=9, fontweight="bold")
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -391,7 +388,7 @@ if calc_trigger or "calculated" in st.session_state:
         ax.set_ylim(-L / 2 - 0.8, L / 2 + 0.8)
         ax.set_aspect("equal")
         ax.axis("off")
-        plt.title("Footing Structural Top Plan View", fontsize=9, fontweight="bold")
+        plt.title(f"Footing Structural Top Plan View (Cover = {cover * (12 if is_imperial else 1000):.1f} {u_rebar})", fontsize=9, fontweight="bold")
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -400,60 +397,179 @@ if calc_trigger or "calculated" in st.session_state:
         plt.close()
         return buf
 
-    # --- PDF Report Generator ---
+    # --- Updated PDF Report Generator Matching User Screenshots Exactly ---
     def generate_pdf_report(sec_buf, plan_buf):
         pdf_buf = io.BytesIO()
-        doc = SimpleDocTemplate(pdf_buf, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36)
+        doc = SimpleDocTemplate(
+            pdf_buf, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36
+        )
         styles = getSampleStyleSheet()
 
-        title_style = ParagraphStyle('TitleStyle', parent=styles['Heading1'], fontSize=14, leading=18, textColor=colors.HexColor("#000000"), alignment=1)
-        sub_title_style = ParagraphStyle('SubTitleStyle', parent=styles['Normal'], fontSize=8, leading=11, textColor=colors.HexColor("#000000"), alignment=1)
-        h2_style = ParagraphStyle('H2Style', parent=styles['Heading2'], fontSize=10, leading=14, textColor=colors.HexColor("#000000"))
-        normal_style = ParagraphStyle('NormalStyle', parent=styles['Normal'], fontSize=8, leading=11, textColor=colors.HexColor("#000000"))
+        # Custom Typography Styles matching screenshots
+        main_title_style = ParagraphStyle(
+            'MainTitle',
+            parent=styles['Heading1'],
+            fontName='Helvetica-Bold',
+            fontSize=16,
+            leading=20,
+            textColor=colors.HexColor("#1A365D"),  # Dark Navy Blue
+            spaceAfter=8
+        )
+        sub_title_style = ParagraphStyle(
+            'SubTitle',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=9,
+            leading=13,
+            textColor=colors.HexColor("#2D3748"),
+            spaceAfter=12
+        )
+        h1_sec_style = ParagraphStyle(
+            'H1Sec',
+            parent=styles['Heading2'],
+            fontName='Helvetica-Bold',
+            fontSize=12,
+            leading=16,
+            textColor=colors.HexColor("#000000"),
+            spaceBefore=10,
+            spaceAfter=6
+        )
+        sub_heading_style = ParagraphStyle(
+            'SubHeading',
+            parent=styles['Normal'],
+            fontName='Helvetica-BoldOblique',
+            fontSize=10,
+            leading=14,
+            textColor=colors.HexColor("#2B6CB0"),  # Bright Blue
+            spaceBefore=6,
+            spaceAfter=4
+        )
+        bullet_style = ParagraphStyle(
+            'BulletText',
+            parent=styles['Normal'],
+            fontName='Helvetica',
+            fontSize=9,
+            leading=13,
+            textColor=colors.HexColor("#1A202C")
+        )
+        math_code_style = ParagraphStyle(
+            'MathCode',
+            parent=styles['Normal'],
+            fontName='Courier',
+            fontSize=8.5,
+            leading=12,
+            textColor=colors.HexColor("#4A5568")
+        )
+        final_spec_style = ParagraphStyle(
+            'FinalSpec',
+            parent=styles['Normal'],
+            fontName='Helvetica-BoldOblique',
+            fontSize=10,
+            leading=14,
+            textColor=colors.HexColor("#1A365D"),
+            spaceBefore=8
+        )
 
         story = []
-        story.append(Paragraph("<b>STRUCTURAL & GEOTECHNICAL FOOTING DESIGN CALCULATION REPORT</b>", title_style))
-        story.append(Paragraph(f"Code Standard: {aci_version} | Unit System: {unit_system} | Embedment Depth Df (to Base): {Df:.2f} {u_len}", sub_title_style))
-        story.append(Spacer(1, 10))
+
+        # Header Title
+        story.append(Paragraph("STRUCTURAL & GEOTECHNICAL FOOTING DESIGN CALCULATION REPORT", main_title_style))
+        story.append(Paragraph(
+            f"Code Standard: <b>{aci_version}</b> | Unit System: <b>{unit_system}</b> | Clear Cover: <b>3.0 in (75 mm)</b><br/>"
+            f"Reinforcement Hook Type: <b>{hook_type}</b>",
+            sub_title_style
+        ))
 
         # 1. Column Loads & Eccentricity
-        story.append(Paragraph("<b>1. Column Loads & Eccentricity Calculations</b>", h2_style))
-        story.append(Paragraph(f"Axial Load (P) = {P_unfactored:.2f} {u_force} | Mx = {Mx_unfactored:.2f} {u_moment} | My = {My_unfactored:.2f} {u_moment}", normal_style))
-        story.append(Paragraph(f"Applied Column Eccentricity: e_x,input = {ex_input:.2f} {u_len} | e_y,input = {ey_input:.2f} {u_len}", normal_style))
-        story.append(Paragraph("<b>Step-by-step Eccentricity Derivation:</b>", normal_style))
-        story.append(Paragraph(f"M_x,total = M_x + (P × |e_y|) = {Mx_unfactored:.2f} + ({P_unfactored:.2f} × {abs(ey_input):.2f}) = {Mx_total:.2f} {u_moment}", normal_style))
-        story.append(Paragraph(f"M_y,total = M_y + (P × |e_x|) = {My_unfactored:.2f} + ({P_unfactored:.2f} × {abs(ex_input):.2f}) = {My_total:.2f} {u_moment}", normal_style))
-        story.append(Paragraph(f"e_x,total = M_y,total / P = {e_x_total:.4f} {u_len}", normal_style))
-        story.append(Paragraph(f"e_y,total = M_x,total / P = {e_y_total:.4f} {u_len}", normal_style))
-        story.append(Spacer(1, 8))
+        story.append(Paragraph("1. Column Loads & Eccentricity Calculations", h1_sec_style))
+        story.append(Paragraph(f"• Axial Load (P) = <b>{P_unfactored:.2f} {u_force}</b> | Mx = <b>{Mx_unfactored:.2f} {u_moment}</b> | My = <b>{My_unfactored:.2f} {u_moment}</b>", bullet_style))
+        story.append(Paragraph(f"• Applied Column Eccentricity: e<sub>x,input</sub> = {ex_input:.2f} {u_len}, e<sub>y,input</sub> = {ey_input:.2f} {u_len}", bullet_style))
+        
+        story.append(Paragraph("Step-by-step Eccentricity Derivation:", sub_heading_style))
+        math_1 = (
+            f"M<sub>x,total</sub> = M<sub>x</sub> + (P × |e<sub>y</sub>|) = {Mx_unfactored:.2f} + ({P_unfactored:.2f} × {abs(ey_input):.2f}) = {Mx_total:.2f} {u_moment}<br/>"
+            f"M<sub>y,total</sub> = M<sub>y</sub> + (P × |e<sub>x</sub>|) = {My_unfactored:.2f} + ({P_unfactored:.2f} × {abs(ex_input):.2f}) = {My_total:.2f} {u_moment}<br/>"
+            f"e<sub>x,total</sub> = M<sub>y,total</sub> / P = {My_total:.2f} / {P_unfactored:.2f} = {e_x_total:.4f} {u_len}<br/>"
+            f"e<sub>y,total</sub> = M<sub>x,total</sub> / P = {Mx_total:.2f} / {P_unfactored:.2f} = {e_y_total:.4f} {u_len}"
+        )
+        story.append(Paragraph(math_1, math_code_style))
 
         # 2. Geotechnical Bearing Capacity
-        story.append(Paragraph("<b>2. Geotechnical Bearing Capacity (Multi-Layer Engine)</b>", h2_style))
-        story.append(Paragraph(f"• Footing Dimensions: B = {B:.2f} {u_len}, L = {L:.2f} {u_len}, Df (Base) = {Df:.2f} {u_len}", normal_style))
-        story.append(Paragraph(f"B_eff = {B_eff:.3f} {u_len} | L_eff = {L_eff:.3f} {u_len}", normal_style))
-        story.append(Paragraph(f"q_ult = {q_ult:.2f} {u_stress} | q_allow = q_ult / FS = {q_allow:.2f} {u_stress}", normal_style))
-        story.append(Paragraph(f"q_max,service = P/A + 6Mx/(BL²) + 6My/(LB²) = <b>{q_max_service:.2f} {u_stress}</b> [{'PASS' if q_max_service <= q_allow else 'FAIL'}]", normal_style))
-        story.append(Spacer(1, 8))
+        story.append(Paragraph("2. Geotechnical Bearing Capacity (Multi-Layer Engine)", h1_sec_style))
+        story.append(Paragraph(f"• Footing Dimensions: B = {B:.2f} {u_len}, L = {L:.2f} {u_len}, D<sub>f</sub> = {Df:.2f} {u_len}", bullet_style))
+        
+        story.append(Paragraph("Step-by-step Effective Dimensions & Surcharge:", sub_heading_style))
+        math_2a = (
+            f"B<sub>eff</sub> = B - 2(e<sub>x,total</sub>) = {B:.2f} - 2({e_x_total:.4f}) = {B_eff:.3f} {u_len}<br/>"
+            f"L<sub>eff</sub> = L - 2(e<sub>y,total</sub>) = {L:.2f} - 2({e_y_total:.4f}) = {L_eff:.3f} {u_len}<br/>"
+            f"Effective Soil Surcharge q<sub>surcharge</sub> = Σ (γ<sub>i</sub> × h<sub>i</sub>) = {q_surcharge:.2f} {u_stress}"
+        )
+        story.append(Paragraph(math_2a, math_code_style))
+
+        story.append(Paragraph("Terzaghi / Meyerhof Analytical Equations:", sub_heading_style))
+        math_2b = (
+            f"N<sub>c</sub> = {Nc:.2f}, N<sub>q</sub> = {Nq:.2f}, N<sub>γ</sub> = {Ng:.2f} (Bearing Layer φ = {phi_val:.1f}°)<br/>"
+            f"q<sub>ult</sub> = (c × N<sub>c</sub>) + (q<sub>surcharge</sub> × N<sub>q</sub>) + (0.5 × γ<sub>eff</sub> × B<sub>eff</sub> × N<sub>γ</sub>)<br/>"
+            f"q<sub>ult</sub> = ({c_val:.1f} × {Nc:.2f}) + ({q_surcharge:.2f} × {Nq:.2f}) + (0.5 × {target_layer['gamma']:.1f} × {B_eff:.2f} × {Ng:.2f}) = {q_ult:.2f} {u_stress}<br/>"
+            f"q<sub>allow</sub> = q<sub>ult</sub> / FS = {q_ult:.2f} / {FS:.1f} = {q_allow:.2f} {u_stress}<br/>"
+            f"q<sub>max,service</sub> = P/A + 6M<sub>x</sub>/(BL²) + 6M<sub>y</sub>/(LB²) = {q_max_service:.2f} {u_stress} [{'PASS' if q_max_service <= q_allow else 'FAIL'}]"
+        )
+        story.append(Paragraph(math_2b, math_code_style))
 
         # 3. Structural Shear Verification
-        story.append(Paragraph("<b>3. Structural Shear Verification (ACI 318)</b>", h2_style))
-        story.append(Paragraph(f"• Factored Load Pu = {Pu:.2f} {u_force}", normal_style))
-        story.append(Paragraph(f"• Factored Ultimate Pressure qu = {qu_factored:.2f} {u_stress}", normal_style))
-        story.append(Paragraph(f"• Effective Depth d_eff = h - cover = {d_eff:.3f} {u_len} | Size Effect λs = {lambda_s:.3f}", normal_style))
-        story.append(Paragraph(f"3.1 Two-Way Punching Shear Calculation:<br/>Vu,punch = {Vu_punch:.2f} {u_force} | φVc,punch = {Phi_Vc_punch:.2f} {u_force} [{'PASS' if Phi_Vc_punch >= Vu_punch else 'FAIL'}]", normal_style))
-        story.append(Paragraph(f"3.2 One-Way Beam Shear Calculation:<br/>Vu,oneway = {Vu_oneway:.2f} {u_force} | φVc,oneway = {Phi_Vc_oneway:.2f} {u_force} [{'PASS' if Phi_Vc_oneway >= Vu_oneway else 'FAIL'}]", normal_style))
-        story.append(Spacer(1, 8))
+        story.append(Paragraph("3. Structural Shear Verification (ACI 318)", h1_sec_style))
+        story.append(Paragraph(f"• Factored Load P<sub>u</sub> = 1.2 × DL + 1.6 × LL = <b>{Pu:.2f} {u_force}</b>", bullet_style))
+        story.append(Paragraph(f"• Factored Ultimate Pressure q<sub>u</sub> = P<sub>u</sub>/A + 6M<sub>ux</sub>/(BL²) = <b>{qu_factored:.2f} {u_stress}</b>", bullet_style))
+        story.append(Paragraph(f"• Effective Depth d<sub>eff</sub> = h - cover = {h_foot:.3f} - {cover:.3f} = <b>{d_eff:.3f} {u_len}</b> | Size Effect λ<sub>s</sub> = <b>{lambda_s:.3f}</b>", bullet_style))
+
+        story.append(Paragraph("3.1 Two-Way Punching Shear Calculation:", sub_heading_style))
+        math_3a = (
+            f"Critical Perimeter b<sub>o</sub> = 2 × [(c<sub>x</sub> + d) + (c<sub>y</sub> + d)] = {bo:.3f} {u_len}<br/>"
+            f"Punching Area A<sub>bo</sub> = (c<sub>x</sub> + d)(c<sub>y</sub> + d) = {Area_bo:.3f} {u_len}²<br/>"
+            f"V<sub>u,punch</sub> = q<sub>u</sub> × (B × L - A<sub>bo</sub>) = {qu_factored:.2f} × ({B*L:.2f} - {Area_bo:.2f}) = {Vu_punch:.2f} {u_force}<br/>"
+            f"v<sub>c,punch</sub> = 0.33 × λ<sub>s</sub> × √(f'c) = {vc_punch:.3f}<br/>"
+            f"φV<sub>c,punch</sub> = φ × v<sub>c</sub> × b<sub>o</sub> × d = {Phi_Vc_punch:.2f} {u_force} [{'PASS' if Phi_Vc_punch >= Vu_punch else 'FAIL'}]"
+        )
+        story.append(Paragraph(math_3a, math_code_style))
+
+        story.append(Paragraph("3.2 One-Way Beam Shear Calculation:", sub_heading_style))
+        math_3b = (
+            f"Max Cantilever Arm = (B/2 - c<sub>x</sub>/2 + e<sub>x</sub>) = {cantilever_x:.3f} {u_len}<br/>"
+            f"Critical Shear Distance = Cantilever - d = {cantilever_x:.3f} - {d_eff:.3f} = {max(0.0, crit_dist_x):.3f} {u_len}<br/>"
+            f"V<sub>u,oneway</sub> = q<sub>u</sub> × L × Critical Distance = {qu_factored:.2f} × {L:.2f} × {max(0.0, crit_dist_x):.3f} = {Vu_oneway:.2f} {u_force}<br/>"
+            f"φV<sub>c,oneway</sub> = φ × (0.17 × λ<sub>s</sub> × √(f'c)) × L × d = {Phi_Vc_oneway:.2f} {u_force} [{'PASS' if Phi_Vc_oneway >= Vu_oneway else 'FAIL'}]"
+        )
+        story.append(Paragraph(math_3b, math_code_style))
 
         # 4. Flexural Reinforcement Design
-        story.append(Paragraph("<b>4. Flexural Reinforcement Design</b>", h2_style))
-        story.append(Paragraph(f"FINAL SPECIFICATION: Provide <b>{num_bars_x} Nos - {selected_rebar}</b> with {hook_type} @ <b>{spacing_x} {spacing_unit} c/c</b> (Both Ways)", normal_style))
+        story.append(Paragraph("4. Flexural Reinforcement Design", h1_sec_style))
+        math_4a = (
+            f"M<sub>u</sub> = (q<sub>u</sub> × L × Cantilever²) / 2 = ({qu_factored:.2f} × {L:.2f} × {cantilever_x:.2f}²) / 2 = {Mu_x:.2f} {u_moment}<br/>"
+            f"Nominal Resistance Factor R<sub>n</sub> = M<sub>u</sub> / (φ × b × d²) = {Rn_val:.4f} {unit_rn}"
+        )
+        story.append(Paragraph(math_4a, math_code_style))
+
+        math_4b = (
+            f"Calculated Steel Ratio ρ = (0.85 × f'c / f<sub>y</sub>) × [1 - √(1 - 2R<sub>n</sub> / (0.85 × f'c))] = {rho_calc:.6f}<br/>"
+            f"Required Steel Ratio ρ<sub>req</sub> = max(ρ, ρ<sub>min</sub> = 0.0018) = {rho_req:.6f}<br/>"
+            f"Required Steel Area A<sub>s,req</sub> = ρ<sub>req</sub> × L × d = {As_req:.2f} {unit_as}<br/>"
+            f"Selected Bar: {selected_rebar} with {hook_type} (Effective Area = {actual_area:.2f} {unit_as} with {bar_tolerance_pct}% tolerance)<br/>"
+            f"Bar Count Calculation: N = ceil(A<sub>s,req</sub> / A<sub>bar</sub>) = ceil({As_req:.2f} / {actual_area:.2f}) = {num_bars_x} Bars<br/>"
+            f"Spacing Calculation: s = (L - 2xCover) / (N - 1) = {spacing_x:.1f} {spacing_unit} c/c (Cover = {cover*(12 if is_imperial else 1000):.1f} {u_rebar})"
+        )
+        story.append(Paragraph(math_4b, math_code_style))
+
+        story.append(Paragraph(
+            f"FINAL SPECIFICATION: Provide {num_bars_x} Nos - {selected_rebar} with {hook_type} @ {spacing_x} {spacing_unit} c/c (Both Ways)",
+            final_spec_style
+        ))
         story.append(Spacer(1, 10))
 
         # 5. Structural Detailing Drawings
-        story.append(Paragraph("<b>5. Structural Detailing Drawings</b>", h2_style))
-        img_sec = RLImage(sec_buf, width=230, height=150)
-        img_plan = RLImage(plan_buf, width=230, height=150)
-        img_table = Table([[img_sec, img_plan]], colWidths=[250, 250])
+        story.append(Paragraph("5. Structural Detailing Drawings", h1_sec_style))
+        img_sec = RLImage(sec_buf, width=240, height=160)
+        img_plan = RLImage(plan_buf, width=240, height=160)
+        img_table = Table([[img_sec, img_plan]], colWidths=[255, 255])
         story.append(img_table)
 
         doc.build(story)
@@ -480,12 +596,10 @@ if calc_trigger or "calculated" in st.session_state:
         st.markdown(f"• **x-direction Steel:** Provide **{num_bars_x} Nos - {selected_rebar}** @ **{spacing_x} {spacing_unit} c/c**")
         st.markdown(f"• **y-direction Steel:** Provide **{num_bars_y} Nos - {selected_rebar}** @ **{spacing_y} {spacing_unit} c/c**")
 
-        # Drawings Display
         st.subheader("4. Detailing Drawings")
         st.image(sec_img, caption="Footing Elevation Section (Ground to Base = Df)")
         st.image(plan_img, caption="Footing Plan Top View with Dimensions & Rebar Layout")
 
-        # Download PDF Button at Bottom
         st.markdown("---")
         st.download_button(
             label="📄 Download Detailed Calculation PDF Report",
