@@ -268,7 +268,7 @@ if calc_trigger or "calculated" in st.session_state:
         Phi_Vc_punch = ((phi_s * vc_punch * (bo * 12) * (d_eff * 12)) / 1000.0) * force_mult
         Phi_Vc_oneway = ((phi_s * vc_oneway * (L * 12) * (d_eff * 12)) / 1000.0) * force_mult
 
-    # Reinforcement Calculation Corrected
+    # Reinforcement Calculation (Updated Conservative Beam Minimum Included)
     Mu_x = (qu_factored * L * (cantilever_x**2)) / 2
     Mu_y = (qu_factored * B * (cantilever_y**2)) / 2
 
@@ -277,7 +277,13 @@ if calc_trigger or "calculated" in st.session_state:
         Mu_Nmm = Mu_x * 1e6 * (9.81 if is_ton else 1.0)
         Rn_val = Mu_Nmm / (0.9 * w_mm * (d_mm**2))
         rho_calc = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn_val) / (0.85 * fc))))
-        rho_req = max(rho_calc, 0.0018)
+        
+        # Minimum Steel Ratios
+        rho_slab_min = 0.0018
+        rho_beam_min = max((0.25 * np.sqrt(fc)) / fy, 1.4 / fy)
+        rho_min = max(rho_slab_min, rho_beam_min)
+        
+        rho_req = max(rho_calc, rho_min)
         As_req = rho_req * w_mm * d_mm
         total_span = L * 1000
         clear_c = 75.0
@@ -289,7 +295,13 @@ if calc_trigger or "calculated" in st.session_state:
         Mu_inlbs = Mu_x * 12000 * (2.0 if is_ton else 1.0)
         Rn_val = Mu_inlbs / (0.9 * w_in * (d_in**2))
         rho_calc = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn_val) / (0.85 * fc))))
-        rho_req = max(rho_calc, 0.0018)
+        
+        # Minimum Steel Ratios (Imperial)
+        rho_slab_min = 0.0018
+        rho_beam_min = max((3.0 * np.sqrt(fc)) / fy, 200.0 / fy)
+        rho_min = max(rho_slab_min, rho_beam_min)
+        
+        rho_req = max(rho_calc, rho_min)
         As_req = rho_req * w_in * d_in
         total_span = L * 12
         clear_c = 3.0
@@ -409,67 +421,25 @@ if calc_trigger or "calculated" in st.session_state:
         styles = getSampleStyleSheet()
 
         main_title_style = ParagraphStyle(
-            'MainTitle',
-            parent=styles['Heading1'],
-            fontName='Helvetica-Bold',
-            fontSize=16,
-            leading=20,
-            textColor=colors.HexColor("#1A365D"),
-            spaceAfter=8
+            'MainTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=16, leading=20, textColor=colors.HexColor("#1A365D"), spaceAfter=8
         )
         sub_title_style = ParagraphStyle(
-            'SubTitle',
-            parent=styles['Normal'],
-            fontName='Helvetica',
-            fontSize=9,
-            leading=13,
-            textColor=colors.HexColor("#2D3748"),
-            spaceAfter=12
+            'SubTitle', parent=styles['Normal'], fontName='Helvetica', fontSize=9, leading=13, textColor=colors.HexColor("#2D3748"), spaceAfter=12
         )
         h1_sec_style = ParagraphStyle(
-            'H1Sec',
-            parent=styles['Heading2'],
-            fontName='Helvetica-Bold',
-            fontSize=12,
-            leading=16,
-            textColor=colors.HexColor("#000000"),
-            spaceBefore=10,
-            spaceAfter=6
+            'H1Sec', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=12, leading=16, textColor=colors.HexColor("#000000"), spaceBefore=10, spaceAfter=6
         )
         sub_heading_style = ParagraphStyle(
-            'SubHeading',
-            parent=styles['Normal'],
-            fontName='Helvetica-BoldOblique',
-            fontSize=10,
-            leading=14,
-            textColor=colors.HexColor("#2B6CB0"),
-            spaceBefore=6,
-            spaceAfter=4
+            'SubHeading', parent=styles['Normal'], fontName='Helvetica-BoldOblique', fontSize=10, leading=14, textColor=colors.HexColor("#2B6CB0"), spaceBefore=6, spaceAfter=4
         )
         bullet_style = ParagraphStyle(
-            'BulletText',
-            parent=styles['Normal'],
-            fontName='Helvetica',
-            fontSize=9,
-            leading=13,
-            textColor=colors.HexColor("#1A202C")
+            'BulletText', parent=styles['Normal'], fontName='Helvetica', fontSize=9, leading=13, textColor=colors.HexColor("#1A202C")
         )
         math_code_style = ParagraphStyle(
-            'MathCode',
-            parent=styles['Normal'],
-            fontName='Courier',
-            fontSize=8.5,
-            leading=12,
-            textColor=colors.HexColor("#4A5568")
+            'MathCode', parent=styles['Normal'], fontName='Courier', fontSize=8.5, leading=12, textColor=colors.HexColor("#4A5568")
         )
         final_spec_style = ParagraphStyle(
-            'FinalSpec',
-            parent=styles['Normal'],
-            fontName='Helvetica-BoldOblique',
-            fontSize=10,
-            leading=14,
-            textColor=colors.HexColor("#1A365D"),
-            spaceBefore=8
+            'FinalSpec', parent=styles['Normal'], fontName='Helvetica-BoldOblique', fontSize=10, leading=14, textColor=colors.HexColor("#1A365D"), spaceBefore=8
         )
 
         story = []
@@ -496,7 +466,7 @@ if calc_trigger or "calculated" in st.session_state:
         )
         story.append(Paragraph(math_1, math_code_style))
 
-        # 2. Geotechnical Bearing Capacity (Fixed Logic)
+        # 2. Geotechnical Bearing Capacity
         story.append(Paragraph("2. Geotechnical Bearing Capacity", h1_sec_style))
         story.append(Paragraph(f"• Footing Dimensions: B = {B:.2f} {u_len}, L = {L:.2f} {u_len}, D<sub>f</sub> = {Df:.2f} {u_len}", bullet_style))
         story.append(Paragraph(f"• Selected Calculation Method: <b>{geo_input_mode}</b>", bullet_style))
@@ -547,7 +517,7 @@ if calc_trigger or "calculated" in st.session_state:
         )
         story.append(Paragraph(math_3b, math_code_style))
 
-        # 4. Flexural Reinforcement Design (Fixed Logic)
+        # 4. Flexural Reinforcement Design
         story.append(Paragraph("4. Flexural Reinforcement Design", h1_sec_style))
         math_4a = (
             f"M<sub>u</sub> = (q<sub>u</sub> × L × Cantilever²) / 2 = ({qu_factored:.2f} × {L:.2f} × {cantilever_x:.2f}²) / 2 = {Mu_x:.2f} {u_moment}<br/>"
@@ -557,7 +527,8 @@ if calc_trigger or "calculated" in st.session_state:
 
         math_4b = (
             f"Calculated Steel Ratio ρ = (0.85 × f'c / f<sub>y</sub>) × [1 - √(1 - 2R<sub>n</sub> / (0.85 × f'c))] = {rho_calc:.6f}<br/>"
-            f"Required Steel Ratio ρ<sub>req</sub> = max(ρ, ρ<sub>min</sub> = 0.0018) = {rho_req:.6f}<br/>"
+            f"Minimum Ratios: ρ<sub>slab,min</sub> = {rho_slab_min:.6f} | Conservative Beam ρ<sub>beam,min</sub> = {rho_beam_min:.6f}<br/>"
+            f"Governing Required Steel Ratio ρ<sub>req</sub> = max(ρ, ρ<sub>slab,min</sub>, ρ<sub>beam,min</sub>) = {rho_req:.6f}<br/>"
             f"Required Steel Area A<sub>s,req</sub> = ρ<sub>req</sub> × L × d = {As_req:.2f} {unit_as}<br/>"
             f"Selected Bar: {selected_rebar} with {hook_type} (Effective Area = {actual_area:.2f} {unit_as} with {bar_tolerance_pct}% tolerance)<br/>"
             f"Bar Count Calculation: N = ceil(A<sub>s,req</sub> / A<sub>bar</sub>) = ceil({As_req:.2f} / {actual_area:.2f}) = {num_bars_x} Bars<br/>"
