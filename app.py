@@ -79,12 +79,26 @@ if selected == "Soil Classification":
             key="soil_input_method"
         )
 
+        sieve_sizes = np.array([9.5, 4.75, 2.0, 0.85, 0.425, 0.15, 0.075])
+        sieve_names = ["3/8 in (9.5mm)", "#4 (4.75mm)", "#10 (2.0mm)", "#20 (0.85mm)", "#40 (0.425mm)", "#100 (0.15mm)", "#200 (0.075mm)"]
+        passing_data = []
+
         if input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
             gravel = st.number_input("Gravel %", 0.0, 100.0, 15.0, step=0.1)
             sand = st.number_input("Sand %", 0.0, 100.0, 35.0, step=0.1)
             silt = st.number_input("Silt %", 0.0, 100.0, 30.0, step=0.1)
             clay = st.number_input("Clay %", 0.0, 100.0, 20.0, step=0.1)
             fines_total = silt + clay
+
+            # Synthesize representative curve points for plot
+            p_38 = 100.0
+            p_4 = 100.0 - gravel
+            p_200 = fines_total
+            p_10 = p_4 - (sand * 0.3)
+            p_40 = p_4 - (sand * 0.7)
+            passing_data = [p_38, p_4, p_10, p_10 - (sand * 0.2), p_40, p_200 + (sand * 0.1), p_200]
+            silt_ratio = (silt / fines_total * 100.0) if fines_total > 0 else 50.0
+
         else:
             st.markdown("Enter Sieve Analysis Data (Standard Sieves)")
             sieve_basis = st.radio("Sieve Data Format", ["% Passing", "% Retained"], horizontal=True)
@@ -96,15 +110,14 @@ if selected == "Soil Classification":
                 p20 = st.number_input("Sieve #20 (0.85 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
                 p40 = st.number_input("Sieve #40 (0.425 mm) - % Passing", 0.0, 100.0, 98.0, step=0.1)
                 p100 = st.number_input("Sieve #100 (0.15 mm) - % Passing", 0.0, 100.0, 96.0, step=0.1)
-                p200 = st.number_input("Sieve #200 / 0.063mm - % Passing", 0.0, 100.0, 95.0, step=0.1)
+                p200 = st.number_input("Sieve #200 / 0.075mm - % Passing", 0.0, 100.0, 95.0, step=0.1)
                 
-                # Boundary check based on standard
+                passing_data = [p38, p4, p10, p20, p40, p100, p200]
+
                 if "AASHTO" in system or "BS 5930" in system:
-                    # Gravel > 2.0 mm (#10 Sieve)
                     gravel = max(0.0, 100.0 - p10)
                     sand = max(0.0, p10 - p200)
                 else: 
-                    # Gravel > 4.75 mm (#4 Sieve) for USCS / IS 1498
                     gravel = max(0.0, 100.0 - p4)
                     sand = max(0.0, p4 - p200)
                     
@@ -122,12 +135,21 @@ if selected == "Soil Classification":
                 auto_pan = max(0.0, 100.0 - accumulated_retained)
                 r_pan = st.number_input("Pan - % Retained (Auto-filled)", 0.0, 100.0, auto_pan, step=0.1)
                 
-                # Corrected % Retained logic according to selected standard
+                # Calculating cumulative passing
+                p38 = 100.0 - r38
+                p4 = p38 - r4
+                p10 = p4 - r10
+                p20 = p10 - r20
+                p40 = p20 - r40
+                p100 = p40 - r100
+                p200 = p100 - r200
+                passing_data = [p38, p4, p10, p20, p40, p100, p200]
+
                 if "AASHTO" in system or "BS 5930" in system:
-                    gravel = r38 + r4 + r10  # > 2.0mm
+                    gravel = r38 + r4 + r10
                     sand = r20 + r40 + r100 + r200
                 else:
-                    gravel = r38 + r4  # > 4.75mm
+                    gravel = r38 + r4
                     sand = r10 + r20 + r40 + r100 + r200
                     
                 fines_total = r_pan
@@ -274,9 +296,40 @@ if selected == "Soil Classification":
             "IS 1498 (Indian Standard)": is_res
         })
         
-        # Cleaned up Stacked Bar Chart Display
+        # Grain Size Distribution Curve (Gradation Curve)
+        st.subheader("📉 Grain Size Distribution Curve")
+        fig_gsd, ax_gsd = plt.subplots(figsize=(7, 4.0))
+        
+        # Extended Points for smooth Curve Display
+        d_extended = np.array([100.0, 75.0] + list(sieve_sizes) + [0.005, 0.001])
+        p_extended = np.array([100.0, 100.0] + list(passing_data) + [clay, 0.0])
+        
+        ax_gsd.plot(d_extended, p_extended, color='#1e88e5', linewidth=2.5, marker='o', markersize=5, label="Soil Sample")
+        
+        # Particle boundary lines (Standard Geotechnical Grain Size Divisions)
+        ax_gsd.axvline(4.75, color='gray', linestyle='--', alpha=0.6)
+        ax_gsd.axvline(0.075, color='gray', linestyle='--', alpha=0.6)
+        ax_gsd.axvline(0.002, color='gray', linestyle='--', alpha=0.6)
+        
+        # Boundary Annotations
+        ax_gsd.text(15, 102, "Gravel", fontsize=8, ha='center', fontweight='bold', color='#555555')
+        ax_gsd.text(0.6, 102, "Sand", fontsize=8, ha='center', fontweight='bold', color='#555555')
+        ax_gsd.text(0.012, 102, "Silt", fontsize=8, ha='center', fontweight='bold', color='#555555')
+        ax_gsd.text(0.001, 102, "Clay", fontsize=8, ha='center', fontweight='bold', color='#555555')
+
+        ax_gsd.set_xscale('log')
+        ax_gsd.set_xlim(100.0, 0.0005)  # Reverse x-axis log scale as per Geotechnical Standard
+        ax_gsd.set_ylim(0, 105)
+        ax_gsd.set_xlabel("Particle Diameter - d (mm) [Log Scale]", fontsize=9)
+        ax_gsd.set_ylabel("Percent Passing (%)", fontsize=9)
+        ax_gsd.grid(True, which="both", linestyle=':', alpha=0.6)
+        ax_gsd.legend(loc="lower left", fontsize=8)
+        plt.tight_layout()
+        st.pyplot(fig_gsd)
+
+        # Stacked Bar Chart Display
         st.subheader("🧱 Soil Composition Breakdown")
-        fig_bar, ax_bar = plt.subplots(figsize=(7, 2.0))
+        fig_bar, ax_bar = plt.subplots(figsize=(7, 1.8))
         components = ['Gravel', 'Sand', 'Silt', 'Clay']
         values = [gravel, sand, silt, clay]
         colors_list = ['#8d6e63', '#d4e157', '#4fc3f7', '#e57373']
@@ -285,19 +338,18 @@ if selected == "Soil Classification":
         for comp, val, col in zip(components, values, colors_list):
             if val > 0:
                 ax_bar.barh('Composition', val, left=left, color=col, label=f"{comp}: {val:.1f}%")
-                # Add text label inside bar if width > 8%
                 if val >= 8.0:
                     ax_bar.text(left + val/2, 0, f"{val:.1f}%", ha='center', va='center', color='white', fontweight='bold', fontsize=9)
                 left += val
                 
         ax_bar.set_xlim(0, 100)
         ax_bar.axis('off')
-        ax_bar.legend(loc='upper center', bbox_to_anchor=(0.5, -0.3), ncol=4, frameon=False, fontsize=9)
+        ax_bar.legend(loc='upper center', bbox_to_anchor=(0.5, -0.3), ncol=4, frameon=False, fontsize=8.5)
         plt.tight_layout()
         st.pyplot(fig_bar)
 
         st.subheader("📈 Casagrande Plasticity Chart")
-        fig, ax = plt.subplots(figsize=(6, 3.5))
+        fig, ax = plt.subplots(figsize=(6, 3.2))
         ll_vals = np.linspace(0, 100, 100)
         a_line_vals = 0.73 * (ll_vals - 20)
         
@@ -311,7 +363,7 @@ if selected == "Soil Classification":
         ax.set_xlabel("Liquid Limit (LL %)")
         ax.set_ylabel("Plasticity Index (PI %)")
         ax.grid(True, linestyle=':', alpha=0.6)
-        ax.legend(loc="upper left")
+        ax.legend(loc="upper left", fontsize=8)
         plt.tight_layout()
         
         st.pyplot(fig)
