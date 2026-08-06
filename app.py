@@ -192,7 +192,6 @@ if selected == "Soil Classification":
             clay = st.number_input("Clay %", 0.0, 100.0, 20.0, step=0.1)
             fines_total = silt + clay
 
-            # Synthesize representative curve points for plot
             p_38 = 100.0
             p_4 = 100.0 - gravel
             p_200 = fines_total
@@ -237,7 +236,6 @@ if selected == "Soil Classification":
                 auto_pan = max(0.0, 100.0 - accumulated_retained)
                 r_pan = st.number_input("Pan - % Retained (Auto-filled)", 0.0, 100.0, auto_pan, step=0.1)
                 
-                # Calculating cumulative passing
                 p38 = 100.0 - r38
                 p4 = p38 - r4
                 p10 = p4 - r10
@@ -260,7 +258,6 @@ if selected == "Soil Classification":
             silt = fines_total * (silt_ratio / 100.0)
             clay = fines_total * (1.0 - (silt_ratio / 100.0))
 
-        # Percentage sum validation
         if input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
             total_percent = gravel + sand + silt + clay
             if abs(total_percent - 100.0) > 0.05:
@@ -298,9 +295,6 @@ if selected == "Soil Classification":
         Cu = st.number_input("Uniformity Coefficient (Cu)", 0.0, 50.0, 4.0, step=0.1)
         Cc = st.number_input("Coefficient of Curvature (Cc)", 0.0, 10.0, 1.0, step=0.1)
 
-        # ----------------------------------------------------
-        # SWCC PARAMETERS INPUT
-        # ----------------------------------------------------
         st.header("5. SWCC Estimation Parameters")
         enable_swcc = st.checkbox("Generate Soil-Water Characteristic Curve (SWCC)", value=True)
         
@@ -310,7 +304,7 @@ if selected == "Soil Classification":
                 ["Fredlund & Xing (1994) - Pedotransfer", "van Genuchten (1980) - Empirical Fit"]
             )
             e_void = st.number_input("Void Ratio (e)", 0.1, 3.0, 0.65, step=0.05)
-            theta_s = e_void / (1.0 + e_void) # Saturated volumetric water content
+            theta_s = e_void / (1.0 + e_void)
             st.caption(f"Calculated Porosity / Saturated Volumetric Water Content ($\Theta_s$): `{theta_s:.3f}`")
 
     A_line = 0.73 * (LL - 20) if LL >= 20 else 0.0
@@ -413,29 +407,25 @@ if selected == "Soil Classification":
             "IS 1498 (Indian Standard)": is_res
         })
         
-        # Grain Size Distribution Curve (Gradation Curve)
         st.subheader("📉 Grain Size Distribution Curve")
         fig_gsd, ax_gsd = plt.subplots(figsize=(7, 4.0))
         
-        # Extended Points for smooth Curve Display
         d_extended = np.array([100.0, 75.0] + list(sieve_sizes) + [0.005, 0.001])
         p_extended = np.array([100.0, 100.0] + list(passing_data) + [clay, 0.0])
         
         ax_gsd.plot(d_extended, p_extended, color='#1e88e5', linewidth=2.5, marker='o', markersize=5, label="Soil Sample")
         
-        # Particle boundary lines (Standard Geotechnical Grain Size Divisions)
         ax_gsd.axvline(4.75, color='gray', linestyle='--', alpha=0.6)
         ax_gsd.axvline(0.075, color='gray', linestyle='--', alpha=0.6)
         ax_gsd.axvline(0.002, color='gray', linestyle='--', alpha=0.6)
         
-        # Boundary Annotations
         ax_gsd.text(15, 102, "Gravel", fontsize=8, ha='center', fontweight='bold', color='#555555')
         ax_gsd.text(0.6, 102, "Sand", fontsize=8, ha='center', fontweight='bold', color='#555555')
         ax_gsd.text(0.012, 102, "Silt", fontsize=8, ha='center', fontweight='bold', color='#555555')
         ax_gsd.text(0.001, 102, "Clay", fontsize=8, ha='center', fontweight='bold', color='#555555')
 
         ax_gsd.set_xscale('log')
-        ax_gsd.set_xlim(100.0, 0.0005)  # Reverse x-axis log scale as per Geotechnical Standard
+        ax_gsd.set_xlim(100.0, 0.0005)
         ax_gsd.set_ylim(0, 105)
         ax_gsd.set_xlabel("Particle Diameter - d (mm) [Log Scale]", fontsize=9)
         ax_gsd.set_ylabel("Percent Passing (%)", fontsize=9)
@@ -444,7 +434,6 @@ if selected == "Soil Classification":
         plt.tight_layout()
         st.pyplot(fig_gsd)
 
-        # Stacked Bar Chart Display
         st.subheader("🧱 Soil Composition Breakdown")
         fig_bar, ax_bar = plt.subplots(figsize=(7, 1.8))
         components = ['Gravel', 'Sand', 'Silt', 'Clay']
@@ -484,51 +473,38 @@ if selected == "Soil Classification":
         plt.tight_layout()
         st.pyplot(fig)
 
-        # ----------------------------------------------------
-        # SWCC GENERATION & DISPLAY SECTION
-        # ----------------------------------------------------
         if enable_swcc:
             st.markdown("---")
             st.subheader("💧 Soil-Water Characteristic Curve (SWCC)")
             st.caption("Estimated from Grain Size Distribution & Volumetric Properties")
 
-            # Suction range in kPa (0.01 kPa to 1,000,000 kPa)
             psi = np.logspace(-2, 6, 200)
 
-            # Estimating parameters based on Soil Fine Content & Clay Content
-            # d30, d60 estimating or using empirical fit parameters based on clay/fines
             if clay > 40:
-                # High Clay content (High AEV, gradual desaturation)
-                a_param = 300.0  # Air-entry related parameter (kPa)
-                n_param = 1.2    # Pore size distribution parameter
-                m_param = 0.8    # Curve asymmetry parameter
-                theta_r = 0.08   # Residual water content
+                a_param = 300.0
+                n_param = 1.2
+                m_param = 0.8
+                theta_r = 0.08
             elif fines_total > 50:
-                # Silt/Fine Soil
                 a_param = 50.0
                 n_param = 1.5
                 m_param = 0.9
                 theta_r = 0.04
             elif sand > 50:
-                # Sandy Soil (Low AEV, sharp desaturation)
                 a_param = 5.0
                 n_param = 3.0
                 m_param = 1.2
                 theta_r = 0.02
             else:
-                # Gravelly / Mixed Soil
                 a_param = 10.0
                 n_param = 2.0
                 m_param = 1.0
                 theta_r = 0.01
 
             if "Fredlund & Xing" in swcc_method:
-                # C(psi) Correction function
                 C_psi = 1 - (np.log(1 + psi / 3000) / np.log(1 + 1e6 / 3000))
-                # Fredlund & Xing Equation
                 theta_w = C_psi * (theta_s / np.power(np.log(np.e + np.power(psi / a_param, n_param)), m_param))
             else:
-                # van Genuchten Model
                 m_vg = 1 - (1 / n_param) if n_param > 1 else 0.5
                 alpha_vg = 1.0 / a_param
                 theta_w = theta_r + (theta_s - theta_r) / np.power(1 + np.power(alpha_vg * psi, n_param), m_vg)
@@ -543,7 +519,6 @@ if selected == "Soil Classification":
             ax_swcc.set_ylabel("Volumetric Water Content - $\Theta$ ($m^3/m^3$)", fontsize=9)
             ax_swcc.grid(True, which="both", linestyle=':', alpha=0.6)
             
-            # Annotate Air Entry Value (AEV) Estimation
             ax_swcc.axvline(a_param, color='orange', linestyle='--', alpha=0.7, label=f"Est. Air Entry Value ≈ {a_param:.1f} kPa")
             ax_swcc.legend(loc="upper right", fontsize=8)
             plt.tight_layout()
@@ -1586,16 +1561,16 @@ elif selected == "Continuous Wall Footing":
             st.markdown(f"• **Main Steel:** Provide **{selected_main_bar} @ {s_main_final} {spacing_unit} c/c** ({hook_type})")
             st.markdown(f"• **Temp/Shrinkage Steel:** Provide **{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c**")
 
-            st.subheader("4. Development Length Verification ($L_d$)")
+            st.subheader("4. Development Length Verification (L_d)")
             st.metric(
                 f"Available Length vs Req. Length ({u_ld})",
                 f"{L_avail_disp:.1f} / {ld_req:.1f} {u_ld}",
-                delta="✅ PASS (Adequate Anchorage)" if ld_status else "❌ FAIL (Provide Hook or Increase B)"
+                delta="✅ ADEQUATE" if ld_status else "❌ INADEQUATE"
             )
 
             st.subheader("5. Detailing Drawings")
-            st.image(sec_img, caption="Footing Elevation Cross-Section Diagram")
-            st.image(plan_img, caption="Footing Top Structural Plan View")
+            st.image(sec_img, caption="Footing Elevation Section (Ground to Base = Df)")
+            st.image(plan_img, caption="Footing Plan Top View with Dimensions & Rebar Layout")
 
             st.markdown("---")
             st.download_button(
