@@ -1,6 +1,3 @@
-Python
-
-
 import io
 import matplotlib.patches as patches
 import matplotlib.pyplot as plt
