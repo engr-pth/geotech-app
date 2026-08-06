@@ -56,11 +56,11 @@ if selected == "Home":
     """)
 
 # ----------------------------------------------------
-# SOIL CLASSIFICATION PAGE
+# 2. SOIL CLASSIFICATION & SWCC PAGE
 # ----------------------------------------------------
 if selected == "Soil Classification":
-    st.title("🧪 Multi-Standard Soil Classification Suite")
-    st.caption("Supports USCS (ASTM D2487), AASHTO (M 145), BS 5930 / Eurocode 7, and IS 1498 (Indian Standard)")
+    st.title("🧪 Multi-Standard Soil Classification & SWCC Suite")
+    st.caption("Supports USCS (ASTM D2487), AASHTO (M 145), BS 5930 / Eurocode 7, IS 1498, and Estimation of SWCC from PSD")
 
     col_in, col_res = st.columns([1, 1.2])
 
@@ -192,9 +192,24 @@ if selected == "Soil Classification":
         
         st.info(f"**Active Atterberg Parameters:** LL = `{LL:.1f}%`, PL = `{PL:.1f}%`, PI = `{PI:.1f}%`")
         
-        st.header("4. Grain Size Parameters (Optional)")
+        st.header("4. Grain Size Parameters")
         Cu = st.number_input("Uniformity Coefficient (Cu)", 0.0, 50.0, 4.0, step=0.1)
         Cc = st.number_input("Coefficient of Curvature (Cc)", 0.0, 10.0, 1.0, step=0.1)
+
+        # ----------------------------------------------------
+        # SWCC PARAMETERS INPUT
+        # ----------------------------------------------------
+        st.header("5. SWCC Estimation Parameters")
+        enable_swcc = st.checkbox("Generate Soil-Water Characteristic Curve (SWCC)", value=True)
+        
+        if enable_swcc:
+            swcc_method = st.selectbox(
+                "Select SWCC Estimation Model",
+                ["Fredlund & Xing (1994) - Pedotransfer", "van Genuchten (1980) - Empirical Fit"]
+            )
+            e_void = st.number_input("Void Ratio (e)", 0.1, 3.0, 0.65, step=0.05)
+            theta_s = e_void / (1.0 + e_void) # Saturated volumetric water content
+            st.caption(f"Calculated Porosity / Saturated Volumetric Water Content ($\Theta_s$): `{theta_s:.3f}`")
 
     A_line = 0.73 * (LL - 20) if LL >= 20 else 0.0
 
@@ -365,8 +380,82 @@ if selected == "Soil Classification":
         ax.grid(True, linestyle=':', alpha=0.6)
         ax.legend(loc="upper left", fontsize=8)
         plt.tight_layout()
-        
         st.pyplot(fig)
+
+        # ----------------------------------------------------
+        # SWCC GENERATION & DISPLAY SECTION
+        # ----------------------------------------------------
+        if enable_swcc:
+            st.markdown("---")
+            st.subheader("💧 Soil-Water Characteristic Curve (SWCC)")
+            st.caption("Estimated from Grain Size Distribution & Volumetric Properties")
+
+            # Suction range in kPa (0.01 kPa to 1,000,000 kPa)
+            psi = np.logspace(-2, 6, 200)
+
+            # Estimating parameters based on Soil Fine Content & Clay Content
+            # d30, d60 estimating or using empirical fit parameters based on clay/fines
+            if clay > 40:
+                # High Clay content (High AEV, gradual desaturation)
+                a_param = 300.0  # Air-entry related parameter (kPa)
+                n_param = 1.2    # Pore size distribution parameter
+                m_param = 0.8    # Curve asymmetry parameter
+                theta_r = 0.08   # Residual water content
+            elif fines_total > 50:
+                # Silt/Fine Soil
+                a_param = 50.0
+                n_param = 1.5
+                m_param = 0.9
+                theta_r = 0.04
+            elif sand > 50:
+                # Sandy Soil (Low AEV, sharp desaturation)
+                a_param = 5.0
+                n_param = 3.0
+                m_param = 1.2
+                theta_r = 0.02
+            else:
+                # Gravelly / Mixed Soil
+                a_param = 10.0
+                n_param = 2.0
+                m_param = 1.0
+                theta_r = 0.01
+
+            if "Fredlund & Xing" in swcc_method:
+                # C(psi) Correction function
+                C_psi = 1 - (np.log(1 + psi / 3000) / np.log(1 + 1e6 / 3000))
+                # Fredlund & Xing Equation
+                theta_w = C_psi * (theta_s / np.power(np.log(np.e + np.power(psi / a_param, n_param)), m_param))
+            else:
+                # van Genuchten Model
+                m_vg = 1 - (1 / n_param) if n_param > 1 else 0.5
+                alpha_vg = 1.0 / a_param
+                theta_w = theta_r + (theta_s - theta_r) / np.power(1 + np.power(alpha_vg * psi, n_param), m_vg)
+
+            fig_swcc, ax_swcc = plt.subplots(figsize=(7, 4.0))
+            ax_swcc.plot(psi, theta_w, color='#00897b', linewidth=2.5, label=f"Predicted SWCC ({swcc_method.split()[0]})")
+            
+            ax_swcc.set_xscale('log')
+            ax_swcc.set_xlim(0.01, 1000000)
+            ax_swcc.set_ylim(0, theta_s * 1.1)
+            ax_swcc.set_xlabel("Matric Suction - $\psi$ (kPa) [Log Scale]", fontsize=9)
+            ax_swcc.set_ylabel("Volumetric Water Content - $\Theta$ ($m^3/m^3$)", fontsize=9)
+            ax_swcc.grid(True, which="both", linestyle=':', alpha=0.6)
+            
+            # Annotate Air Entry Value (AEV) Estimation
+            ax_swcc.axvline(a_param, color='orange', linestyle='--', alpha=0.7, label=f"Est. Air Entry Value ≈ {a_param:.1f} kPa")
+            ax_swcc.legend(loc="upper right", fontsize=8)
+            plt.tight_layout()
+            
+            st.pyplot(fig_swcc)
+
+            st.info(f"""
+            📌 **Estimated SWCC Parameters Summary:**
+            * **Air-Entry Value (AEV) Parameter ($a$):** `{a_param:.1f} kPa`
+            * **Desaturation Rate Parameter ($n$):** `{n_param:.2f}`
+            * **Saturated Volumetric Water Content ($\Theta_s$):** `{theta_s:.3f}`
+            * **Residual Water Content ($\Theta_r$):** `{theta_r:.3f}`
+            """)
+
 # ----------------------------------------------------
 # 3. ISOLATED FOOTING PAGE
 # ----------------------------------------------------
