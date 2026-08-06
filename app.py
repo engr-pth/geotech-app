@@ -1,1 +1,1506 @@
+import io
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+import numpy as np
+import streamlit as st
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.platypus import (
+    Image as RLImage,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+)
+from streamlit_option_menu import option_menu
+
+# Page Config Setup (Must be the very first Streamlit command)
+st.set_page_config(
+    page_title="Geotechnical Suite",
+    page_icon="🪨",
+    layout="wide"
+)
+
+# Sidebar Menu Definition with Nested Navigation
+with st.sidebar:
+    main_selected = option_menu(
+        menu_title="Main Menu",
+        options=["Home", "Soil Classification", "Shallow Foundation"],
+        icons=["house-fill", "journal-text", "layers-fill"],
+        default_index=0,
+        key="main_menu_nav"
+    )
+    
+    if main_selected == "Shallow Foundation":
+        sub_selected = st.radio(
+            "📌 Select Foundation Type:",
+            ["Isolated Footing", "Continuous Wall Footing"],
+            key="sub_menu_nav"
+        )
+        selected = sub_selected
+    else:
+        selected = main_selected
+
+# ----------------------------------------------------
+# 1. HOME PAGE
+# ----------------------------------------------------
+if selected == "Home":
+    st.title("🧱 Geotechnical Engineering Calculation Suite")
+    st.markdown("""
+    ဤ Web App သည် Geotechnical Engineering တွက်ချက်မှုများအတွက် Tool စုံလင်စွာ ပါဝင်သော Platform ဖြစ်ပါသည်။ 
+
+    👈 **ဘေးဘက် Sidebar မီနူးမှ မိမိအသုံးပြုလိုသည့် Tool ကို ရွေးချယ်ပါ:**
+    * **Soil Classification:** Grain size distribution (Extended Sieve & Hydrometer) နှင့် Atterberg limits များဖြင့် မြေအမျိုးအစားခွဲရန်
+    * **Shallow Foundation:** Footing Design တွက်ချက်ရန်
+    """)
+
+# ----------------------------------------------------
+# 2. SOIL CLASSIFICATION & SWCC PAGE
+# ----------------------------------------------------
+if selected == "Soil Classification":
+    st.title("🧪 Multi-Standard Soil Classification & SWCC Suite")
+    st.caption("Supports USCS (ASTM D2487), AASHTO (M 145), BS 5930 / Eurocode 7, IS 1498, and Estimation of SWCC from PSD")
+
+    col_in, col_res = st.columns([1, 1.2])
+
+    with col_in:
+        st.header("1. Select Primary Classification Standard")
+        system = st.radio(
+            "Standard", 
+            ["USCS (ASTM D2487)", "AASHTO (M 145)", "BS 5930 / Eurocode", "IS 1498 (Indian Standard)"],
+            key="soil_system_choice"
+        )
+
+        st.header("2. Grain Size Distribution Input Method")
+        input_method = st.radio(
+            "Select Input Type",
+            ["Direct Percentages (Gravel, Sand, Silt, Clay)", "Sieve Analysis (% Passing / Retained)"],
+            key="soil_input_method"
+        )
+
+        sieve_sizes = np.array([9.5, 4.75, 2.0, 0.85, 0.425, 0.15, 0.075])
+        sieve_names = ["3/8 in (9.5mm)", "#4 (4.75mm)", "#10 (2.0mm)", "#20 (0.85mm)", "#40 (0.425mm)", "#100 (0.15mm)", "#200 (0.075mm)"]
+        passing_data = []
+
+        if input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
+            gravel = st.number_input("Gravel %", 0.0, 100.0, 15.0, step=0.1)
+            sand = st.number_input("Sand %", 0.0, 100.0, 35.0, step=0.1)
+            silt = st.number_input("Silt %", 0.0, 100.0, 30.0, step=0.1)
+            clay = st.number_input("Clay %", 0.0, 100.0, 20.0, step=0.1)
+            fines_total = silt + clay
+
+            # Synthesize representative curve points for plot
+            p_38 = 100.0
+            p_4 = 100.0 - gravel
+            p_200 = fines_total
+            p_10 = p_4 - (sand * 0.3)
+            p_40 = p_4 - (sand * 0.7)
+            passing_data = [p_38, p_4, p_10, p_10 - (sand * 0.2), p_40, p_200 + (sand * 0.1), p_200]
+            silt_ratio = (silt / fines_total * 100.0) if fines_total > 0 else 50.0
+
+        else:
+            st.markdown("Enter Sieve Analysis Data (Standard Sieves)")
+            sieve_basis = st.radio("Sieve Data Format", ["% Passing", "% Retained"], horizontal=True)
+            
+            if sieve_basis == "% Passing":
+                p38 = st.number_input("3/8 inch (9.5 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
+                p4 = st.number_input("Sieve #4 (4.75 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
+                p10 = st.number_input("Sieve #10 (2.0 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
+                p20 = st.number_input("Sieve #20 (0.85 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
+                p40 = st.number_input("Sieve #40 (0.425 mm) - % Passing", 0.0, 100.0, 98.0, step=0.1)
+                p100 = st.number_input("Sieve #100 (0.15 mm) - % Passing", 0.0, 100.0, 96.0, step=0.1)
+                p200 = st.number_input("Sieve #200 / 0.075mm - % Passing", 0.0, 100.0, 95.0, step=0.1)
+                
+                passing_data = [p38, p4, p10, p20, p40, p100, p200]
+
+                if "AASHTO" in system or "BS 5930" in system:
+                    gravel = max(0.0, 100.0 - p10)
+                    sand = max(0.0, p10 - p200)
+                else: 
+                    gravel = max(0.0, 100.0 - p4)
+                    sand = max(0.0, p4 - p200)
+                    
+                fines_total = max(0.0, p200)
+            else:
+                r38 = st.number_input("3/8 inch (9.5 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
+                r4 = st.number_input("Sieve #4 (4.75 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
+                r10 = st.number_input("Sieve #10 (2.0 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
+                r20 = st.number_input("Sieve #20 (0.85 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
+                r40 = st.number_input("Sieve #40 (0.425 mm) - % Retained", 0.0, 100.0, 2.0, step=0.1)
+                r100 = st.number_input("Sieve #100 (0.15 mm) - % Retained", 0.0, 100.0, 2.0, step=0.1)
+                r200 = st.number_input("Sieve #200 (0.075 mm) - % Retained", 0.0, 100.0, 1.0, step=0.1)
+                
+                accumulated_retained = r38 + r4 + r10 + r20 + r40 + r100 + r200
+                auto_pan = max(0.0, 100.0 - accumulated_retained)
+                r_pan = st.number_input("Pan - % Retained (Auto-filled)", 0.0, 100.0, auto_pan, step=0.1)
+                
+                # Calculating cumulative passing
+                p38 = 100.0 - r38
+                p4 = p38 - r4
+                p10 = p4 - r10
+                p20 = p10 - r20
+                p40 = p20 - r40
+                p100 = p40 - r100
+                p200 = p100 - r200
+                passing_data = [p38, p4, p10, p20, p40, p100, p200]
+
+                if "AASHTO" in system or "BS 5930" in system:
+                    gravel = r38 + r4 + r10
+                    sand = r20 + r40 + r100 + r200
+                else:
+                    gravel = r38 + r4
+                    sand = r10 + r20 + r40 + r100 + r200
+                    
+                fines_total = r_pan
+
+            silt_ratio = st.slider("Silt / Fines Ratio (%)", 0.0, 100.0, 60.0, step=1.0)
+            silt = fines_total * (silt_ratio / 100.0)
+            clay = fines_total * (1.0 - (silt_ratio / 100.0))
+
+        # Percentage sum validation
+        if input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
+            total_percent = gravel + sand + silt + clay
+            if abs(total_percent - 100.0) > 0.05:
+                st.error(f"⚠️ **Total Percentage Error:** {total_percent:.1f}% (Must equal 100%)")
+            else:
+                st.success(f"✅ Total Percentage: `{total_percent:.1f}%`")
+        else:
+            total_sieve_sum = gravel + sand + fines_total
+            if total_sieve_sum > 0:
+                gravel = (gravel / total_sieve_sum) * 100.0
+                sand = (sand / total_sieve_sum) * 100.0
+                silt = (fines_total * (silt_ratio / 100.0) / total_sieve_sum) * 100.0
+                clay = (fines_total * (1.0 - (silt_ratio / 100.0)) / total_sieve_sum) * 100.0
+            st.success(f"✅ Fines: `{fines_total:.1f}%` | Active Standard Boundaries Applied (`{system.split()[0]}`)")
+
+        st.header("3. Atterberg Limits (%)")
+        
+        if 'll_val' not in st.session_state: st.session_state.ll_val = 45.0
+        if 'pl_val' not in st.session_state: st.session_state.pl_val = 20.0
+        if 'pi_val' not in st.session_state: st.session_state.pi_val = 25.0
+
+        def update_pi():
+            st.session_state.pi_val = max(0.0, st.session_state.ll_val - st.session_state.pl_val)
+
+        def update_pl_from_pi():
+            st.session_state.pl_val = max(0.0, st.session_state.ll_val - st.session_state.pi_val)
+
+        LL = st.number_input("Liquid Limit (LL)", 0.0, 150.0, key='ll_val', on_change=update_pi, step=0.1)
+        PL = st.number_input("Plastic Limit (PL)", 0.0, 100.0, key='pl_val', on_change=update_pi, step=0.1)
+        PI = st.number_input("Plasticity Index (PI)", 0.0, 100.0, key='pi_val', on_change=update_pl_from_pi, step=0.1)
+        
+        st.info(f"**Active Atterberg Parameters:** LL = `{LL:.1f}%`, PL = `{PL:.1f}%`, PI = `{PI:.1f}%`")
+        
+        st.header("4. Grain Size Parameters")
+        Cu = st.number_input("Uniformity Coefficient (Cu)", 0.0, 50.0, 4.0, step=0.1)
+        Cc = st.number_input("Coefficient of Curvature (Cc)", 0.0, 10.0, 1.0, step=0.1)
+
+        # ----------------------------------------------------
+        # SWCC PARAMETERS INPUT
+        # ----------------------------------------------------
+        st.header("5. SWCC Estimation Parameters")
+        enable_swcc = st.checkbox("Generate Soil-Water Characteristic Curve (SWCC)", value=True)
+        
+        if enable_swcc:
+            swcc_method = st.selectbox(
+                "Select SWCC Estimation Model",
+                ["Fredlund & Xing (1994) - Pedotransfer", "van Genuchten (1980) - Empirical Fit"]
+            )
+            e_void = st.number_input("Void Ratio (e)", 0.1, 3.0, 0.65, step=0.05)
+            theta_s = e_void / (1.0 + e_void) # Saturated volumetric water content
+            st.caption(f"Calculated Porosity / Saturated Volumetric Water Content ($\Theta_s$): `{theta_s:.3f}`")
+
+    A_line = 0.73 * (LL - 20) if LL >= 20 else 0.0
+
+    def classify_uscs(gravel, sand, fines_val, LL, PI, Cu, Cc):
+        if fines_val >= 50:
+            if LL >= 50:
+                return "CH (High Plasticity Clay)" if PI > A_line else "MH (Elastic Silt)"
+            else:
+                if PI > A_line and PI > 7:
+                    return "CL (Lean Clay)"
+                elif PI < A_line and PI < 4:
+                    return "ML (Low Plasticity Silt)"
+                else:
+                    return "CL-ML (Silty Clay)"
+        else:
+            if gravel > sand:
+                if fines_val < 5:
+                    return "GW (Well-graded Gravel)" if (Cu >= 4 and 1 <= Cc <= 3) else "GP (Poorly-graded Gravel)"
+                elif fines_val > 12:
+                    return "GC (Clayey Gravel)" if PI > A_line else "GM (Silty Gravel)"
+                else:
+                    return "GW-GM / GP-GC (Gravel with Fines)"
+            else:
+                if fines_val < 5:
+                    return "SW (Well-graded Sand)" if (Cu >= 6 and 1 <= Cc <= 3) else "SP (Poorly-graded Sand)"
+                elif fines_val > 12:
+                    return "SC (Clayey Sand)" if PI > A_line else "SM (Silty Sand)"
+                else:
+                    return "SW-SM / SP-SC (Sand with Fines)"
+
+    def classify_aashto(fines_val, LL, PI, gravel, sand):
+        GI = (fines_val - 35) * (0.2 + 0.005 * (LL - 40)) + 0.01 * (fines_val - 15) * (PI - 10)
+        GI = max(0, int(round(GI)))
+        if fines_val <= 35:
+            if fines_val <= 15 and PI <= 6:
+                group = "A-1-a" if gravel > sand else "A-1-b"
+            elif fines_val <= 25 and (LL == 0 or PI <= 6):
+                group = "A-3 (Fine Sand)"
+            else:
+                if PI <= 10:
+                    group = "A-2-4" if LL <= 40 else "A-2-5"
+                else:
+                    group = "A-2-6" if LL <= 40 else "A-2-7"
+            return f"{group} (GI = 0)"
+        else:
+            if LL <= 40:
+                group = "A-4" if PI <= 10 else "A-6"
+            else:
+                group = "A-7-5" if PI <= (LL - 30) else "A-7-6"
+            return f"{group} (GI = {GI})"
+
+    def classify_bs(fines_val, LL, PI):
+        if fines_val >= 35:
+            if LL < 35: qual = "L (Low Plasticity)"
+            elif 35 <= LL < 50: qual = "I (Intermediate Plasticity)"
+            elif 50 <= LL < 70: qual = "H (High Plasticity)"
+            elif 70 <= LL < 90: qual = "V (Very High Plasticity)"
+            else: qual = "E (Extremely High Plasticity)"
+            
+            soil_type = "Clay (C)" if PI > A_line else "Silt (M)"
+            return f"{soil_type} - {qual}"
+        else:
+            return "Coarse-Grained Soil (Gravel/Sand)"
+
+    def classify_is_1498(fines_val, LL, PI):
+        if fines_val >= 50:
+            if LL > 50:
+                return "CH (High Plasticity Clay)" if PI > A_line else "MH (High Plasticity Silt)"
+            elif 35 <= LL <= 50:
+                return "CI (Intermediate Plasticity Clay)" if PI > A_line else "MI (Intermediate Plasticity Silt)"
+            else:
+                return "CL (Low Plasticity Clay)" if PI > A_line else "ML (Low Plasticity Silt)"
+        else:
+            return "Coarse-Grained Soil (Gravel/Sand)"
+
+    with col_res:
+        st.header("📊 Classification Results")
+        
+        uscs_res = classify_uscs(gravel, sand, fines_total, LL, PI, Cu, Cc)
+        aashto_res = classify_aashto(fines_total, LL, PI, gravel, sand)
+        bs_res = classify_bs(fines_total, LL, PI)
+        is_res = classify_is_1498(fines_total, LL, PI)
+        
+        if "USCS" in system:
+            st.success(f"**USCS Symbol:** `{uscs_res}`")
+        elif "AASHTO" in system:
+            st.success(f"**AASHTO Group:** `{aashto_res}`")
+        elif "BS 5930" in system:
+            st.success(f"**BS 5930 Standard:** `{bs_res}`")
+        else:
+            st.success(f"**IS 1498 Symbol:** `{is_res}`")
+            
+        st.markdown("---")
+        st.subheader("🔄 Cross-Standard Comparison")
+        st.json({
+            "USCS (ASTM D2487)": uscs_res,
+            "AASHTO (Highway)": aashto_res,
+            "BS 5930 (British/Euro)": bs_res,
+            "IS 1498 (Indian Standard)": is_res
+        })
+        
+        # Grain Size Distribution Curve (Gradation Curve)
+        st.subheader("📉 Grain Size Distribution Curve")
+        fig_gsd, ax_gsd = plt.subplots(figsize=(7, 4.0))
+        
+        # Extended Points for smooth Curve Display
+        d_extended = np.array([100.0, 75.0] + list(sieve_sizes) + [0.005, 0.001])
+        p_extended = np.array([100.0, 100.0] + list(passing_data) + [clay, 0.0])
+        
+        ax_gsd.plot(d_extended, p_extended, color='#1e88e5', linewidth=2.5, marker='o', markersize=5, label="Soil Sample")
+        
+        # Particle boundary lines (Standard Geotechnical Grain Size Divisions)
+        ax_gsd.axvline(4.75, color='gray', linestyle='--', alpha=0.6)
+        ax_gsd.axvline(0.075, color='gray', linestyle='--', alpha=0.6)
+        ax_gsd.axvline(0.002, color='gray', linestyle='--', alpha=0.6)
+        
+        # Boundary Annotations
+        ax_gsd.text(15, 102, "Gravel", fontsize=8, ha='center', fontweight='bold', color='#555555')
+        ax_gsd.text(0.6, 102, "Sand", fontsize=8, ha='center', fontweight='bold', color='#555555')
+        ax_gsd.text(0.012, 102, "Silt", fontsize=8, ha='center', fontweight='bold', color='#555555')
+        ax_gsd.text(0.001, 102, "Clay", fontsize=8, ha='center', fontweight='bold', color='#555555')
+
+        ax_gsd.set_xscale('log')
+        ax_gsd.set_xlim(100.0, 0.0005)  # Reverse x-axis log scale as per Geotechnical Standard
+        ax_gsd.set_ylim(0, 105)
+        ax_gsd.set_xlabel("Particle Diameter - d (mm) [Log Scale]", fontsize=9)
+        ax_gsd.set_ylabel("Percent Passing (%)", fontsize=9)
+        ax_gsd.grid(True, which="both", linestyle=':', alpha=0.6)
+        ax_gsd.legend(loc="lower left", fontsize=8)
+        plt.tight_layout()
+        st.pyplot(fig_gsd)
+
+        # Stacked Bar Chart Display
+        st.subheader("🧱 Soil Composition Breakdown")
+        fig_bar, ax_bar = plt.subplots(figsize=(7, 1.8))
+        components = ['Gravel', 'Sand', 'Silt', 'Clay']
+        values = [gravel, sand, silt, clay]
+        colors_list = ['#8d6e63', '#d4e157', '#4fc3f7', '#e57373']
+        
+        left = 0
+        for comp, val, col in zip(components, values, colors_list):
+            if val > 0:
+                ax_bar.barh('Composition', val, left=left, color=col, label=f"{comp}: {val:.1f}%")
+                if val >= 8.0:
+                    ax_bar.text(left + val/2, 0, f"{val:.1f}%", ha='center', va='center', color='white', fontweight='bold', fontsize=9)
+                left += val
+                
+        ax_bar.set_xlim(0, 100)
+        ax_bar.axis('off')
+        ax_bar.legend(loc='upper center', bbox_to_anchor=(0.5, -0.3), ncol=4, frameon=False, fontsize=8.5)
+        plt.tight_layout()
+        st.pyplot(fig_bar)
+
+        st.subheader("📈 Casagrande Plasticity Chart")
+        fig, ax = plt.subplots(figsize=(6, 3.2))
+        ll_vals = np.linspace(0, 100, 100)
+        a_line_vals = 0.73 * (ll_vals - 20)
+        
+        ax.plot(ll_vals, a_line_vals, color='red', linestyle='--', label="A-Line")
+        ax.axvline(35, color='gray', linestyle=':', label="LL=35%")
+        ax.axvline(50, color='gray', linestyle=':', label="LL=50%")
+        ax.scatter([LL], [PI], color='blue', s=80, zorder=5, label=f"Soil (LL={LL:.1f}, PI={PI:.1f})")
+        
+        ax.set_xlim(0, 100)
+        ax.set_ylim(0, 60)
+        ax.set_xlabel("Liquid Limit (LL %)")
+        ax.set_ylabel("Plasticity Index (PI %)")
+        ax.grid(True, linestyle=':', alpha=0.6)
+        ax.legend(loc="upper left", fontsize=8)
+        plt.tight_layout()
+        st.pyplot(fig)
+
+        # ----------------------------------------------------
+        # SWCC GENERATION & DISPLAY SECTION
+        # ----------------------------------------------------
+        if enable_swcc:
+            st.markdown("---")
+            st.subheader("💧 Soil-Water Characteristic Curve (SWCC)")
+            st.caption("Estimated from Grain Size Distribution & Volumetric Properties")
+
+            # Suction range in kPa (0.01 kPa to 1,000,000 kPa)
+            psi = np.logspace(-2, 6, 200)
+
+            # Estimating parameters based on Soil Fine Content & Clay Content
+            # d30, d60 estimating or using empirical fit parameters based on clay/fines
+            if clay > 40:
+                # High Clay content (High AEV, gradual desaturation)
+                a_param = 300.0  # Air-entry related parameter (kPa)
+                n_param = 1.2    # Pore size distribution parameter
+                m_param = 0.8    # Curve asymmetry parameter
+                theta_r = 0.08   # Residual water content
+            elif fines_total > 50:
+                # Silt/Fine Soil
+                a_param = 50.0
+                n_param = 1.5
+                m_param = 0.9
+                theta_r = 0.04
+            elif sand > 50:
+                # Sandy Soil (Low AEV, sharp desaturation)
+                a_param = 5.0
+                n_param = 3.0
+                m_param = 1.2
+                theta_r = 0.02
+            else:
+                # Gravelly / Mixed Soil
+                a_param = 10.0
+                n_param = 2.0
+                m_param = 1.0
+                theta_r = 0.01
+
+            if "Fredlund & Xing" in swcc_method:
+                # C(psi) Correction function
+                C_psi = 1 - (np.log(1 + psi / 3000) / np.log(1 + 1e6 / 3000))
+                # Fredlund & Xing Equation
+                theta_w = C_psi * (theta_s / np.power(np.log(np.e + np.power(psi / a_param, n_param)), m_param))
+            else:
+                # van Genuchten Model
+                m_vg = 1 - (1 / n_param) if n_param > 1 else 0.5
+                alpha_vg = 1.0 / a_param
+                theta_w = theta_r + (theta_s - theta_r) / np.power(1 + np.power(alpha_vg * psi, n_param), m_vg)
+
+            fig_swcc, ax_swcc = plt.subplots(figsize=(7, 4.0))
+            ax_swcc.plot(psi, theta_w, color='#00897b', linewidth=2.5, label=f"Predicted SWCC ({swcc_method.split()[0]})")
+            
+            ax_swcc.set_xscale('log')
+            ax_swcc.set_xlim(0.01, 1000000)
+            ax_swcc.set_ylim(0, theta_s * 1.1)
+            ax_swcc.set_xlabel("Matric Suction - $\psi$ (kPa) [Log Scale]", fontsize=9)
+            ax_swcc.set_ylabel("Volumetric Water Content - $\Theta$ ($m^3/m^3$)", fontsize=9)
+            ax_swcc.grid(True, which="both", linestyle=':', alpha=0.6)
+            
+            # Annotate Air Entry Value (AEV) Estimation
+            ax_swcc.axvline(a_param, color='orange', linestyle='--', alpha=0.7, label=f"Est. Air Entry Value ≈ {a_param:.1f} kPa")
+            ax_swcc.legend(loc="upper right", fontsize=8)
+            plt.tight_layout()
+            
+            st.pyplot(fig_swcc)
+
+            st.info(f"""
+            📌 **Estimated SWCC Parameters Summary:**
+            * **Air-Entry Value (AEV) Parameter ($a$):** `{a_param:.1f} kPa`
+            * **Desaturation Rate Parameter ($n$):** `{n_param:.2f}`
+            * **Saturated Volumetric Water Content ($\Theta_s$):** `{theta_s:.3f}`
+            * **Residual Water Content ($\Theta_r$):** `{theta_r:.3f}`
+            """)
+
+# ----------------------------------------------------
+# 3. ISOLATED FOOTING PAGE
+# ----------------------------------------------------
+elif selected == "Isolated Footing":
+    st.title("🏗️ Single Geotechnical & Structural Footing Design Suite")
+
+    col_in, col_res = st.columns([1.1, 1.1])
+
+    with col_in:
+        st.header("1. General & Unit System Selection")
+        unit_system = st.radio(
+            "Unit System",
+            [
+                "SI Units (m, kN, kPa, mm)",
+                "Metric Ton System (m, ton, t/m², mm)",
+                "FPS - Kip System (ft, kips, ksf, in)",
+                "FPS - Ton System (ft, ton, tsf, in)",
+            ],
+            key="iso_unit"
+        )
+
+        is_imperial = "FPS" in unit_system
+        is_ton = "Ton" in unit_system
+
+        u_len = "ft" if is_imperial else "m"
+        u_force = "kips" if (is_imperial and not is_ton) else ("ton" if is_ton else "kN")
+        u_moment = "kip-ft" if (is_imperial and not is_ton) else ("ton-m" if is_ton else "kN-m")
+        u_stress = "tsf" if (is_imperial and is_ton) else ("ksf" if is_imperial else ("t/m²" if is_ton else "kPa"))
+        u_gamma = "pcf" if is_imperial else ("t/m³" if is_ton else "kN/m³")
+        u_rebar = "in" if is_imperial else "mm"
+
+        geo_input_mode = st.radio(
+            "Geotechnical Calculation Method",
+            [
+                "Direct Gross Allowable Soil Capacity",
+                "c-phi Parameters (Analytical - Terzaghi/Meyerhof)",
+                "SPT N-value (Empirical Method - Meyerhof/Bowles)",
+            ],
+            key="iso_geo_mode"
+        )
+
+        st.header("2. Applied Column Loads & Eccentricity")
+        col_p1, col_p2 = st.columns(2)
+        P_DL = col_p1.number_input(f"Dead Load P_DL ({u_force})", 0.0, 100000.0, 300.0 if not is_imperial else 60.0, key="iso_pdl")
+        P_LL = col_p2.number_input(f"Live Load P_LL ({u_force})", 0.0, 100000.0, 200.0 if not is_imperial else 40.0, key="iso_pll")
+        P_unfactored = P_DL + P_LL
+
+        col_mx, col_my = st.columns(2)
+        Mx_unfactored = col_mx.number_input(f"Moment Mx ({u_moment})", 0.0, 10000.0, 0.0, key="iso_mx")
+        My_unfactored = col_my.number_input(f"Moment My ({u_moment})", 0.0, 10000.0, 0.0, key="iso_my")
+
+        col_ex, col_ey = st.columns(2)
+        ex_input = col_ex.number_input(f"Column Eccentricity ex ({u_len})", -5.0, 5.0, 0.0, step=0.05, key="iso_ex")
+        ey_input = col_ey.number_input(f"Column Eccentricity ey ({u_len})", -5.0, 5.0, 0.0, step=0.05, key="iso_ey")
+
+        if "Direct" in geo_input_mode:
+            q_allow_direct = st.number_input(f"Gross Allowable Soil Capacity q_allow ({u_stress})", 1.0, 10000.0, 150.0 if not is_imperial else 3.0, key="iso_qallow")
+            num_layers = 1
+            soil_layers = [{"thickness": 10.0, "gamma": 18.0 if not is_imperial else 115.0, "c": 0, "phi": 0, "N": 0}]
+            FS = 3.0
+        else:
+            q_allow_direct = None
+            st.header("3. Multi-Layer Soil Stratigraphy")
+            num_layers = st.number_input("Number of Soil Layers", 1, 5, 2, key="iso_num_layers")
+
+            soil_layers = []
+            for i in range(int(num_layers)):
+                st.subheader(f"Soil Layer {i+1}")
+                lc1, lc2, lc3, lc4 = st.columns(4)
+                thick = lc1.number_input(f"Thick ({u_len})", 0.5, 50.0, 1.5 if i == 0 else 3.0, key=f"thick_{i}")
+                g_unit = lc2.number_input(f"γ ({u_gamma})", 0.0, 500.0, ((115.0 if is_imperial else (1.8 if is_ton else 18.0)) if i == 0 else (125.0 if is_imperial else (2.0 if is_ton else 20.0))), key=f"gamma_{i}")
+
+                if "c-phi" in geo_input_mode:
+                    c_i = lc3.number_input(f"c ({u_stress})", 0.0, 5000.0, 10.0 if not is_imperial else 0.2, key=f"c_{i}")
+                    phi_i = lc4.number_input("φ (deg)", 0.0, 45.0, 28.0 if i == 0 else 32.0, key=f"phi_{i}")
+                    n_spt_i = 0
+                else:
+                    n_spt_i = lc3.number_input("SPT N", 1, 100, 12 if i == 0 else 22, key=f"n_{i}")
+                    c_i, phi_i = 0.0, 0.0
+
+                soil_layers.append({"thickness": thick, "gamma": g_unit, "c": c_i, "phi": phi_i, "N": n_spt_i})
+            FS = st.number_input("Geotechnical Safety Factor (FS)", 1.0, 10.0, 3.0, key="iso_fs")
+
+        st.header("4. Geometry Settings (Footing & Column)")
+        col_b, col_l = st.columns(2)
+        B = col_b.number_input(f"Footing Width B (x-dir) ({u_len})", 0.5, 50.0, 1.8 if not is_imperial else 6.0, key="iso_b")
+        L = col_l.number_input(f"Footing Length L (y-dir) ({u_len})", 0.5, 50.0, 1.8 if not is_imperial else 6.0, key="iso_l")
+
+        col_shape = st.radio("Column Shape", ["Rectangular / Square", "Circular"], key="iso_col_shape")
+        if col_shape == "Circular":
+            D_col = st.number_input(f"Column Diameter D ({u_len})", 0.1, 5.0, 0.45 if not is_imperial else 1.25, key="iso_dcol")
+            cx = D_col
+            cy = D_col
+        else:
+            D_col = None
+            col_cx, col_cy = st.columns(2)
+            cx = col_cx.number_input(f"Column Size cx ({u_len})", 0.1, 5.0, 0.4 if not is_imperial else 1.0, key="iso_cx")
+            cy = col_cy.number_input(f"Column Size cy ({u_len})", 0.1, 5.0, 0.4 if not is_imperial else 1.25, key="iso_cy")
+
+        Df = st.number_input(f"Embedment Depth Df (to Bottom of Footing) ({u_len})", 0.0, 20.0, 1.5 if not is_imperial else 3.5, key="iso_df")
+        h_foot = st.number_input(f"Footing Thickness h ({u_len})", 0.1, 5.0, 0.45 if not is_imperial else 1.5, key="iso_h")
+        Dw = st.number_input(f"Water Table Depth Dw ({u_len})", 0.0, 50.0, 0.8 if not is_imperial else 2.5, key="iso_dw")
+
+        st.header("5. Structural & Rebar Details")
+        aci_version = st.selectbox("ACI 318 Code Standard", ["ACI 318-22", "ACI 318-19", "ACI 318-14", "ACI 318-11"], key="iso_aci")
+
+        u_fc = "psi" if is_imperial else "MPa"
+        fc = st.number_input(f"Concrete Strength f'c ({u_fc})", 10.0, 10000.0, 28.0 if not is_imperial else 4000.0, key="iso_fc")
+        fy = st.number_input(f"Steel Yield Strength fy ({u_fc})", 100.0, 100000.0, 420.0 if not is_imperial else 60000.0, key="iso_fy")
+
+        rebar_system = st.radio("Rebar Unit System Standard", ["Metric Sizes (mm)", "Imperial Sizes (# / in)"], key="iso_rebar_sys")
+
+        if "Metric" in rebar_system:
+            rebar_options = {
+                "16 mm": {"dia": 16.0, "area_mm2": 201.06, "area_in2": 0.3116, "is_metric": True},
+                "18 mm": {"dia": 18.0, "area_mm2": 254.47, "area_in2": 0.3944, "is_metric": True},
+                "20 mm": {"dia": 20.0, "area_mm2": 314.16, "area_in2": 0.4869, "is_metric": True},
+                "22 mm": {"dia": 22.0, "area_mm2": 380.13, "area_in2": 0.5892, "is_metric": True},
+                "25 mm": {"dia": 25.0, "area_mm2": 490.87, "area_in2": 0.7608, "is_metric": True},
+            }
+        else:
+            rebar_options = {
+                "#5 (0.625in)": {"dia": 0.625, "area_mm2": 200.0, "area_in2": 0.31, "is_metric": False},
+                "#6 (0.75in)": {"dia": 0.75, "area_mm2": 284.0, "area_in2": 0.44, "is_metric": False},
+                "#7 (0.875in)": {"dia": 0.875, "area_mm2": 387.0, "area_in2": 0.60, "is_metric": False},
+                "#8 (1.0in)": {"dia": 1.0, "area_mm2": 510.0, "area_in2": 0.79, "is_metric": False},
+            }
+
+        col_rb, col_tol = st.columns(2)
+        selected_rebar = col_rb.selectbox("Select Reinforcement Bar", list(rebar_options.keys()), key="iso_rebar")
+        bar_tolerance_pct = col_tol.number_input("Market Bar Size Reduction (%)", 0.0, 15.0, 0.0, step=0.5, key="iso_tol")
+
+        clear_cover_input = st.selectbox("Clear Concrete Cover", ["3.0 inches (75 mm) - Standard Footing Cover"], index=0, key="iso_cover")
+        hook_type = st.radio("Rebar End Hook Type", ["None (Straight Bar)", "90-Degree Standard Hook", "180-Degree Standard Hook"], key="iso_hook")
+
+        is_selected_metric = rebar_options[selected_rebar]["is_metric"]
+        nom_area = rebar_options[selected_rebar]["area_in2"] if is_imperial else rebar_options[selected_rebar]["area_mm2"]
+        actual_area = nom_area * (1.0 - (bar_tolerance_pct / 100.0))
+
+        calc_trigger = st.button("🚀 Calculate Single Footing Design", type="primary", use_container_width=True, key="iso_calc_btn")
+
+    if calc_trigger or "calculated" in st.session_state:
+        st.session_state["calculated"] = True
+
+        Mx_total = Mx_unfactored + (P_unfactored * abs(ey_input))
+        My_total = My_unfactored + (P_unfactored * abs(ex_input))
+        e_x_total = My_total / P_unfactored if P_unfactored > 0 else 0.0
+        e_y_total = Mx_total / P_unfactored if P_unfactored > 0 else 0.0
+
+        q_surcharge = 0.0
+        current_depth = 0.0
+        gamma_w = 62.4 if is_imperial else (1.0 if is_ton else 9.81)
+        bearing_layer_idx = 0
+
+        for idx, layer in enumerate(soil_layers):
+            layer_top = current_depth
+            layer_bottom = current_depth + layer["thickness"]
+            if Df >= layer_top and Df < layer_bottom:
+                bearing_layer_idx = idx
+            if Df > layer_top:
+                effective_thick = min(Df, layer_bottom) - layer_top
+                if Dw < min(Df, layer_bottom):
+                    dry_thick = max(0.0, Dw - layer_top)
+                    sat_thick = effective_thick - dry_thick
+                    q_surcharge += (dry_thick * layer["gamma"]) + (sat_thick * (layer["gamma"] - gamma_w))
+                else:
+                    q_surcharge += effective_thick * layer["gamma"]
+            current_depth = layer_bottom
+
+        target_layer = soil_layers[bearing_layer_idx]
+        B_eff = max(0.1, B - 2 * e_x_total)
+        L_eff = max(0.1, L - 2 * e_y_total)
+
+        c_val = target_layer["c"]
+        phi_val = target_layer["phi"]
+        if "Direct" in geo_input_mode:
+            q_allow = q_allow_direct
+            q_ult = q_allow * FS
+            Nc, Nq, Ng = 0.0, 0.0, 0.0
+        elif "SPT" in geo_input_mode:
+            N_val = target_layer["N"]
+            Kd = min(1.33, 1 + 0.33 * (Df / B_eff))
+            if is_imperial:
+                q_allow = (N_val / 4.0) * (1.0 if is_ton else 2.0) * Kd
+            else:
+                q_allow = (N_val * 1.2 if is_ton else N_val / 0.05) * Kd
+            q_ult = q_allow * FS
+            Nc, Nq, Ng = 0.0, 0.0, 0.0
+        else:
+            rad_phi = np.radians(phi_val)
+            if phi_val > 0:
+                Nq = np.exp(np.pi * np.tan(rad_phi)) * (np.tan(np.radians(45 + phi_val / 2))) ** 2
+                Nc = (Nq - 1) / np.tan(rad_phi)
+                Ng = 2 * (Nq + 1) * np.tan(rad_phi)
+            else:
+                Nc, Nq, Ng = 5.14, 1.0, 0.0
+
+            gamma_eff = target_layer["gamma"] - (gamma_w if Dw <= Df else 0.0)
+            q_ult = (c_val * Nc) + (q_surcharge * Nq) + (0.5 * gamma_eff * B_eff * Ng)
+            q_allow = q_ult / FS
+
+        footing_area = B * L
+        q_avg = P_unfactored / footing_area
+        q_max_service = q_avg + (6 * Mx_total / (B * (L**2))) + (6 * My_total / (L * (B**2)))
+
+        Pu = (1.2 * P_DL) + (1.6 * P_LL)
+        Mux_total = (1.2 * Mx_unfactored) + (1.6 * (P_unfactored * abs(ey_input)))
+        qu_factored = (Pu / footing_area) + (6 * Mux_total / (B * (L**2)))
+
+        cover = 0.075 if not is_imperial else (3.0 / 12.0)
+        d_eff = h_foot - cover
+
+        if aci_version in ["ACI 318-19", "ACI 318-22"]:
+            d_mm_check = d_eff * 1000 if not is_imperial else d_eff * 12 * 25.4
+            lambda_s = min(1.0, np.sqrt(2 / (1 + 0.004 * d_mm_check)))
+        else:
+            lambda_s = 1.0
+
+        if col_shape == "Circular":
+            bo = np.pi * (D_col + d_eff)
+            Area_bo = (np.pi / 4.0) * ((D_col + d_eff) ** 2)
+            cantilever_x = max((B / 2.0) - (0.886 * D_col / 2.0) + ex_input, (B / 2.0) - (0.886 * D_col / 2.0) - ex_input)
+            cantilever_y = max((L / 2.0) - (0.886 * D_col / 2.0) + ey_input, (L / 2.0) - (0.886 * D_col / 2.0) - ey_input)
+        else:
+            bo = 2 * ((cx + d_eff) + (cy + d_eff))
+            Area_bo = (cx + d_eff) * (cy + d_eff)
+            cantilever_x = max((B / 2.0) - (cx / 2.0) + ex_input, (B / 2.0) - (cx / 2.0) - ex_input)
+            cantilever_y = max((L / 2.0) - (cy / 2.0) + ey_input, (L / 2.0) - (cy / 2.0) - ey_input)
+
+        Vu_punch = qu_factored * (footing_area - Area_bo)
+        crit_dist_x = cantilever_x - d_eff
+        Vu_oneway = qu_factored * L * max(0.0, crit_dist_x)
+
+        phi_s = 0.75
+        if not is_imperial:
+            vc_punch = 0.33 * lambda_s * np.sqrt(fc)
+            vc_oneway = 0.17 * lambda_s * np.sqrt(fc)
+            force_mult = 1.0 / 9.81 if is_ton else 1.0
+            Phi_Vc_punch = ((phi_s * vc_punch * (bo * 1000) * (d_eff * 1000)) / 1000.0) * force_mult
+            Phi_Vc_oneway = ((phi_s * vc_oneway * (L * 1000) * (d_eff * 1000)) / 1000.0) * force_mult
+        else:
+            vc_punch = 4.0 * lambda_s * np.sqrt(fc)
+            vc_oneway = 2.0 * lambda_s * np.sqrt(fc)
+            force_mult = 0.5 if is_ton else 1.0
+            Phi_Vc_punch = ((phi_s * vc_punch * (bo * 12) * (d_eff * 12)) / 1000.0) * force_mult
+            Phi_Vc_oneway = ((phi_s * vc_oneway * (L * 12) * (d_eff * 12)) / 1000.0) * force_mult
+
+        Mu_x = (qu_factored * L * (cantilever_x**2)) / 2
+        Mu_y = (qu_factored * B * (cantilever_y**2)) / 2
+
+        if not is_imperial:
+            w_mm, d_mm = L * 1000, d_eff * 1000
+            Mu_Nmm = Mu_x * 1e6 * (9.81 if is_ton else 1.0)
+            Rn_val = Mu_Nmm / (0.9 * w_mm * (d_mm**2))
+            rho_calc = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn_val) / (0.85 * fc))))
+            
+            rho_slab_min = 0.0018
+            rho_beam_min = max((0.25 * np.sqrt(fc)) / fy, 1.4 / fy)
+            rho_min = max(rho_slab_min, rho_beam_min)
+            
+            rho_req = max(rho_calc, rho_min)
+            As_req = rho_req * w_mm * d_mm
+            total_span = L * 1000
+            clear_c = 75.0
+            unit_as = "mm²"
+            unit_rn = "N/mm²"
+            spacing_unit = "mm"
+        else:
+            w_in, d_in = L * 12, d_eff * 12
+            Mu_inlbs = Mu_x * 12000 * (2.0 if is_ton else 1.0)
+            Rn_val = Mu_inlbs / (0.9 * w_in * (d_in**2))
+            rho_calc = (0.85 * fc / fy) * (1 - np.sqrt(max(0.0, 1 - (2 * Rn_val) / (0.85 * fc))))
+            
+            rho_slab_min = 0.0018
+            rho_beam_min = max((3.0 * np.sqrt(fc)) / fy, 200.0 / fy)
+            rho_min = max(rho_slab_min, rho_beam_min)
+            
+            rho_req = max(rho_calc, rho_min)
+            As_req = rho_req * w_in * d_in
+            total_span = L * 12
+            clear_c = 3.0
+            unit_as = "in²"
+            unit_rn = "psi"
+            spacing_unit = "in"
+
+        n_bars = int(np.ceil(As_req / actual_area))
+        num_bars_x = max(2, n_bars)
+        spacing_x = round((total_span - (2 * clear_c)) / max(1, (num_bars_x - 1)), 1)
+
+        num_bars_y = num_bars_x
+        spacing_y = spacing_x
+
+        def draw_cross_section():
+            fig, ax = plt.subplots(figsize=(6.5, 4.5))
+
+            footing_bottom_y = -Df
+            footing_top_y = -Df + h_foot
+
+            ax.fill_between([-B / 2 - 1.2, B / 2 + 1.2], [0, 0], [footing_bottom_y - 0.5, footing_bottom_y - 0.5], color="#E5D3B3", alpha=0.5)
+            ax.axhline(0, color="k", linestyle="--", linewidth=1, label="Ground Level (GL)")
+
+            if Dw <= (Df + 0.5):
+                ax.axhline(-Dw, color="blue", linestyle="-.", linewidth=1.5, label=f"Water Table (Dw={Dw:.2f}{u_len})")
+
+            ax.add_patch(plt.Rectangle((-B / 2, footing_bottom_y), B, h_foot, facecolor="#9CA3AF", edgecolor="black", linewidth=1.5, label="Footing"))
+
+            col_x_start = ex_input - (cx / 2.0)
+            col_height = (Df - h_foot) + 0.3
+            if col_shape == "Circular":
+                ax.add_patch(plt.Rectangle((col_x_start, footing_top_y), cx, col_height, facecolor="#4B5563", edgecolor="black", linewidth=1.5, label="Circular Col"))
+            else:
+                ax.add_patch(plt.Rectangle((col_x_start, footing_top_y), cx, col_height, facecolor="#4B5563", edgecolor="black", linewidth=1.5, label="Column"))
+
+            rebar_y_xdir = footing_bottom_y + cover
+            left_x = -B / 2 + cover
+            right_x = B / 2 - cover
+            ax.plot([left_x, right_x], [rebar_y_xdir, rebar_y_xdir], color="red", linewidth=2.0, label=f"x-dir: {num_bars_x}-{selected_rebar}")
+
+            hook_len = 0.12 if not is_imperial else 0.4
+            if "90-Degree" in hook_type:
+                hook_len = 0.1 if not is_imperial else 0.3
+                ax.plot([left_x, left_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+                ax.plot([right_x, right_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+
+            elif "180-Degree" in hook_type:
+                r_hook = 0.04 if not is_imperial else 0.12
+                tail_len = 0.05 if not is_imperial else 0.15
+
+                theta_left = np.linspace(1.5 * np.pi, 0.5 * np.pi, 30)
+                x_arc_left = left_x + r_hook * np.cos(theta_left)
+                y_arc_left = (rebar_y_xdir + r_hook) + r_hook * np.sin(theta_left)
+
+                ax.plot(x_arc_left, y_arc_left, color="red", linewidth=2.0)
+                ax.plot([left_x, left_x + tail_len], 
+                        [rebar_y_xdir + 2 * r_hook, rebar_y_xdir + 2 * r_hook], color="red", linewidth=2.0)
+
+                theta_right = np.linspace(-0.5 * np.pi, 0.5 * np.pi, 30)
+                x_arc_right = right_x + r_hook * np.cos(theta_right)
+                y_arc_right = (rebar_y_xdir + r_hook) + r_hook * np.sin(theta_right)
+
+                ax.plot(x_arc_right, y_arc_right, color="red", linewidth=2.0)
+                ax.plot([right_x, right_x - tail_len], 
+                        [rebar_y_xdir + 2 * r_hook, rebar_y_xdir + 2 * r_hook], color="red", linewidth=2.0)
+
+            x_coords = np.linspace(left_x, right_x, num_bars_x)
+            ax.scatter(x_coords, [rebar_y_xdir + 0.02] * num_bars_x, color="darkblue", s=15, zorder=5, label=f"y-dir: {num_bars_y} Nos")
+
+            ax.set_xlim(-B / 2 - 1.0, B / 2 + 1.0)
+            ax.set_ylim(footing_bottom_y - 0.7, 0.5)
+            ax.set_aspect("equal")
+            ax.axis("off")
+            ax.legend(loc="upper right", fontsize=6.0)
+            plt.title(f"Footing Elevation Section ({hook_type})", fontsize=9, fontweight="bold")
+            plt.tight_layout()
+
+            buf = io.BytesIO()
+            plt.savefig(buf, format="png", dpi=200, bbox_inches="tight")
+            buf.seek(0)
+            plt.close()
+            return buf
+
+        def draw_plan_view():
+            fig, ax = plt.subplots(figsize=(6.5, 6.5))
+            ax.add_patch(patches.Rectangle((-B / 2, -L / 2), B, L, facecolor="#E5E7EB", edgecolor="black", linewidth=1.5))
+
+            left_x, right_x = -B / 2 + cover, B / 2 - cover
+            bot_y, top_y = -L / 2 + cover, L / 2 - cover
+
+            y_pos_list = np.linspace(bot_y, top_y, num_bars_x)
+            for y_p in y_pos_list:
+                ax.plot([left_x, right_x], [y_p, y_p], color="red", linewidth=1.0, alpha=0.7)
+
+            x_pos_list = np.linspace(left_x, right_x, num_bars_y)
+            for x_p in x_pos_list:
+                ax.plot([x_p, x_p], [bot_y, top_y], color="blue", linewidth=1.0, alpha=0.7)
+
+            if col_shape == "Circular":
+                ax.add_patch(patches.Circle((ex_input, ey_input), radius=D_col / 2.0, facecolor="#374151", edgecolor="black", linewidth=1.5, zorder=6))
+                ax.text(ex_input, ey_input, f"D={D_col:.2f}", color="white", ha="center", va="center", fontsize=7, fontweight="bold", zorder=7)
+            else:
+                col_x_min = ex_input - (cx / 2.0)
+                col_y_min = ey_input - (cy / 2.0)
+                ax.add_patch(patches.Rectangle((col_x_min, col_y_min), cx, cy, facecolor="#374151", edgecolor="black", linewidth=1.5, zorder=6))
+                ax.text(ex_input, ey_input, f"cx={cx:.2f}\ncy={cy:.2f}", color="white", ha="center", va="center", fontsize=7, fontweight="bold", zorder=7)
+
+            ax.set_xlim(-B / 2 - 0.8, B / 2 + 0.8)
+            ax.set_ylim(-L / 2 - 0.8, L / 2 + 0.8)
+            ax.set_aspect("equal")
+            ax.axis("off")
+
+            cover_val_disp = cover * (12.0 if is_imperial else 1000.0)
+            plt.title(f"Footing Structural Top Plan View (Cover = {cover_val_disp:.1f} {u_rebar})", fontsize=9, fontweight="bold")
+            plt.tight_layout()
+
+            buf = io.BytesIO()
+            plt.savefig(buf, format="png", dpi=200, bbox_inches="tight")
+            buf.seek(0)
+            plt.close()
+            return buf
+
+        def generate_pdf_report(sec_buf, plan_buf):
+            pdf_buf = io.BytesIO()
+            doc = SimpleDocTemplate(
+                pdf_buf, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36
+            )
+            styles = getSampleStyleSheet()
+
+            main_title_style = ParagraphStyle(
+                'MainTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=16, leading=20, textColor=colors.HexColor("#1A365D"), spaceAfter=8
+            )
+            sub_title_style = ParagraphStyle(
+                'SubTitle', parent=styles['Normal'], fontName='Helvetica', fontSize=9, leading=13, textColor=colors.HexColor("#2D3748"), spaceAfter=12
+            )
+            h1_sec_style = ParagraphStyle(
+                'H1Sec', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=12, leading=16, textColor=colors.HexColor("#000000"), spaceBefore=10, spaceAfter=6
+            )
+            sub_heading_style = ParagraphStyle(
+                'SubHeading', parent=styles['Normal'], fontName='Helvetica-BoldOblique', fontSize=10, leading=14, textColor=colors.HexColor("#2B6CB0"), spaceBefore=6, spaceAfter=4
+            )
+            bullet_style = ParagraphStyle(
+                'BulletText', parent=styles['Normal'], fontName='Helvetica', fontSize=9, leading=13, textColor=colors.HexColor("#1A202C")
+            )
+            math_code_style = ParagraphStyle(
+                'MathCode', parent=styles['Normal'], fontName='Courier', fontSize=8.5, leading=12, textColor=colors.HexColor("#4A5568")
+            )
+            final_spec_style = ParagraphStyle(
+                'FinalSpec', parent=styles['Normal'], fontName='Helvetica-BoldOblique', fontSize=10, leading=14, textColor=colors.HexColor("#1A365D"), spaceBefore=8
+            )
+
+            story = []
+
+            story.append(Paragraph("STRUCTURAL & GEOTECHNICAL FOOTING DESIGN CALCULATION REPORT", main_title_style))
+            story.append(Paragraph(
+                f"Code Standard: <b>{aci_version}</b> | Unit System: <b>{unit_system}</b> | Clear Cover: <b>3.0 in (75 mm)</b><br/>"
+                f"Reinforcement Hook Type: <b>{hook_type}</b>",
+                sub_title_style
+            ))
+
+            story.append(Paragraph("1. Column Loads & Eccentricity Calculations", h1_sec_style))
+            story.append(Paragraph(f"• Axial Load (P) = <b>{P_unfactored:.2f} {u_force}</b> | Mx = <b>{Mx_unfactored:.2f} {u_moment}</b> | My = <b>{My_unfactored:.2f} {u_moment}</b>", bullet_style))
+            story.append(Paragraph(f"• Applied Column Eccentricity: e<sub>x,input</sub> = {ex_input:.2f} {u_len}, e<sub>y,input</sub> = {ey_input:.2f} {u_len}", bullet_style))
+            
+            story.append(Paragraph("Step-by-step Eccentricity Derivation:", sub_heading_style))
+            math_1 = (
+                f"M<sub>x,total</sub> = M<sub>x</sub> + (P × |e<sub>y</sub>|) = {Mx_unfactored:.2f} + ({P_unfactored:.2f} × {abs(ey_input):.2f}) = {Mx_total:.2f} {u_moment}<br/>"
+                f"M<sub>y,total</sub> = M<sub>y</sub> + (P × |e<sub>x</sub>|) = {My_unfactored:.2f} + ({P_unfactored:.2f} × {abs(ex_input):.2f}) = {My_total:.2f} {u_moment}<br/>"
+                f"e<sub>x,total</sub> = M<sub>y,total</sub> / P = {My_total:.2f} / {P_unfactored:.2f} = {e_x_total:.4f} {u_len}<br/>"
+                f"e<sub>y,total</sub> = M<sub>x,total</sub> / P = {Mx_total:.2f} / {P_unfactored:.2f} = {e_y_total:.4f} {u_len}"
+            )
+            story.append(Paragraph(math_1, math_code_style))
+
+            story.append(Paragraph("2. Geotechnical Bearing Capacity", h1_sec_style))
+            story.append(Paragraph(f"• Footing Dimensions: B = {B:.2f} {u_len}, L = {L:.2f} {u_len}, D<sub>f</sub> = {Df:.2f} {u_len}", bullet_style))
+            story.append(Paragraph(f"• Selected Calculation Method: <b>{geo_input_mode}</b>", bullet_style))
+            
+            if "Direct" in geo_input_mode:
+                math_2b = (
+                    f"q<sub>allow,direct</sub> = {q_allow:.2f} {u_stress}<br/>"
+                    f"q<sub>max,service</sub> = P/A + 6M<sub>x</sub>/(BL²) + 6M<sub>y</sub>/(LB²) = {q_max_service:.2f} {u_stress} [{'PASS' if q_max_service <= q_allow else 'FAIL'}]"
+                )
+            elif "SPT" in geo_input_mode:
+                if is_imperial:
+                    formula_str = "q<sub>allow</sub> = (N / 4.0) × (1.0 if ton else 2.0) × K<sub>d</sub>"
+                    calc_str = f"q<sub>allow</sub> = ({target_layer['N']} / 4.0) × {'1.0' if is_ton else '2.0'} × {Kd:.2f} = {q_allow:.2f} {u_stress}"
+                else:
+                    formula_str = "q<sub>allow</sub> = (N × 1.2 if ton else N / 0.05) × K<sub>d</sub>"
+                    calc_str = f"q<sub>allow</sub> = ({target_layer['N']} × 1.2 if ton else {target_layer['N']} / 0.05) × {Kd:.2f} = {q_allow:.2f} {u_stress}"
+
+                math_2b = (
+                    f"<b>SPT N-value Empirical Formulation (Meyerhof/Bowles):</b><br/>"
+                    f"• Target Layer Standard Penetration Resistance N-value = <b>{target_layer['N']}</b><br/>"
+                    f"• Effective Footing Width B' = B - 2e<sub>x</sub> = {B:.2f} - 2({e_x_total:.4f}) = {B_eff:.2f} {u_len}<br/>"
+                    f"• Depth Correction Factor K<sub>d</sub> = min(1.33, 1 + 0.33 × (D<sub>f</sub> / B'))<br/>"
+                    f"  K<sub>d</sub> = min(1.33, 1 + 0.33 × ({Df:.2f} / {B_eff:.2f})) = {Kd:.2f}<br/>"
+                    f"• Allowable Bearing Capacity Formula:<br/>"
+                    f"  {formula_str}<br/>"
+                    f"  {calc_str}<br/>"
+                    f"• Equivalent Ultimate Capacity q<sub>ult</sub> = q<sub>allow</sub> × FS = {q_allow:.2f} × {FS:.1f} = {q_ult:.2f} {u_stress}<br/>"
+                    f"• Applied Service Soil Pressure Check:<br/>"
+                    f"  q<sub>max,service</sub> = P/A + 6M<sub>x</sub>/(BL²) + 6M<sub>y</sub>/(LB²)<br/>"
+                    f"  q<sub>max,service</sub> = {P_unfactored:.2f}/({B:.2f}×{L:.2f}) + 6({Mx_total:.2f})/({B:.2f}×{L:.2f}²) + 6({My_total:.2f})/({L:.2f}×{B:.2f}²)<br/>"
+                    f"  q<sub>max,service</sub> = {q_max_service:.2f} {u_stress} [{'PASS' if q_max_service <= q_allow else 'FAIL'}]"
+                )
+            else:
+                math_2b = (
+                    f"N<sub>c</sub> = {Nc:.2f}, N<sub>q</sub> = {Nq:.2f}, N<sub>γ</sub> = {Ng:.2f} (Bearing Layer φ = {phi_val:.1f}°)<br/>"
+                    f"q<sub>ult</sub> = (c × N<sub>c</sub>) + (q<sub>surcharge</sub> × N<sub>q</sub>) + (0.5 × γ<sub>eff</sub> × B<sub>eff</sub> × N<sub>γ</sub>)<br/>"
+                    f"q<sub>ult</sub> = ({c_val:.1f} × {Nc:.2f}) + ({q_surcharge:.2f} × {Nq:.2f}) + (0.5 × {target_layer['gamma']:.1f} × {B_eff:.2f} × {Ng:.2f}) = {q_ult:.2f} {u_stress}<br/>"
+                    f"q<sub>allow</sub> = q<sub>ult</sub> / FS = {q_ult:.2f} / {FS:.1f} = {q_allow:.2f} {u_stress}<br/>"
+                    f"q<sub>max,service</sub> = P/A + 6M<sub>x</sub>/(BL²) + 6M<sub>y</sub>/(LB²) = {q_max_service:.2f} {u_stress} [{'PASS' if q_max_service <= q_allow else 'FAIL'}]"
+                )
+            story.append(Paragraph(math_2b, math_code_style))
+
+            story.append(Paragraph("3. Structural Shear Verification (ACI 318)", h1_sec_style))
+            story.append(Paragraph(f"• Factored Load P<sub>u</sub> = 1.2 × DL + 1.6 × LL = <b>{Pu:.2f} {u_force}</b>", bullet_style))
+            story.append(Paragraph(f"• Factored Ultimate Pressure q<sub>u</sub> = P<sub>u</sub>/A + 6M<sub>ux</sub>/(BL²) = <b>{qu_factored:.2f} {u_stress}</b>", bullet_style))
+            story.append(Paragraph(f"• Effective Depth d<sub>eff</sub> = h - cover = {h_foot:.3f} - {cover:.3f} = <b>{d_eff:.3f} {u_len}</b> | Size Effect λ<sub>s</sub> = <b>{lambda_s:.3f}</b>", bullet_style))
+
+            story.append(Paragraph("3.1 Two-Way Punching Shear Calculation:", sub_heading_style))
+            math_3a = (
+                f"Critical Perimeter b<sub>o</sub> = 2 × [(c<sub>x</sub> + d) + (c<sub>y</sub> + d)] = {bo:.3f} {u_len}<br/>"
+                f"Punching Area A<sub>bo</sub> = (c<sub>x</sub> + d)(c<sub>y</sub> + d) = {Area_bo:.3f} {u_len}²<br/>"
+                f"V<sub>u,punch</sub> = q<sub>u</sub> × (B × L - A<sub>bo</sub>) = {qu_factored:.2f} × ({B*L:.2f} - {Area_bo:.2f}) = {Vu_punch:.2f} {u_force}<br/>"
+                f"v<sub>c,punch</sub> = 0.33 × λ<sub>s</sub> × √(f'c) = {vc_punch:.3f}<br/>"
+                f"φV<sub>c,punch</sub> = φ × v<sub>c</sub> × b<sub>o</sub> × d = {Phi_Vc_punch:.2f} {u_force} [{'PASS' if Phi_Vc_punch >= Vu_punch else 'FAIL'}]"
+            )
+            story.append(Paragraph(math_3a, math_code_style))
+
+            story.append(Paragraph("3.2 One-Way Beam Shear Calculation:", sub_heading_style))
+            math_3b = (
+                f"Max Cantilever Arm = (B/2 - c<sub>x</sub>/2 + e<sub>x</sub>) = {cantilever_x:.3f} {u_len}<br/>"
+                f"Critical Shear Distance = Cantilever - d = {cantilever_x:.3f} - {d_eff:.3f} = {max(0.0, crit_dist_x):.3f} {u_len}<br/>"
+                f"V<sub>u,oneway</sub> = q<sub>u</sub> × L × Critical Distance = {qu_factored:.2f} × {L:.2f} × {max(0.0, crit_dist_x):.3f} = {Vu_oneway:.2f} {u_force}<br/>"
+                f"φV<sub>c,oneway</sub> = φ × (0.17 × λ<sub>s</sub> × √(f'c)) × L × d = {Phi_Vc_oneway:.2f} {u_force} [{'PASS' if Phi_Vc_oneway >= Vu_oneway else 'FAIL'}]"
+            )
+            story.append(Paragraph(math_3b, math_code_style))
+
+            story.append(Paragraph("4. Flexural Reinforcement Design", h1_sec_style))
+            math_4a = (
+                f"M<sub>u</sub> = (q<sub>u</sub> × L × Cantilever²) / 2 = ({qu_factored:.2f} × {L:.2f} × {cantilever_x:.2f}²) / 2 = {Mu_x:.2f} {u_moment}<br/>"
+                f"Nominal Resistance Factor R<sub>n</sub> = M<sub>u</sub> / (φ × b × d²) = {Rn_val:.4f} {unit_rn}"
+            )
+            story.append(Paragraph(math_4a, math_code_style))
+
+            math_4b = (
+                f"Calculated Steel Ratio ρ = (0.85 × f'c / f<sub>y</sub>) × [1 - √(1 - 2R<sub>n</sub> / (0.85 × f'c))] = {rho_calc:.6f}<br/>"
+                f"Minimum Ratios: ρ<sub>slab,min</sub> = {rho_slab_min:.6f} | Conservative Beam ρ<sub>beam,min</sub> = {rho_beam_min:.6f}<br/>"
+                f"Governing Required Steel Ratio ρ<sub>req</sub> = max(ρ, ρ<sub>slab,min</sub>, ρ<sub>beam,min</sub>) = {rho_req:.6f}<br/>"
+                f"Required Steel Area A<sub>s,req</sub> = ρ<sub>req</sub> × L × d = {As_req:.2f} {unit_as}<br/>"
+                f"Selected Bar: {selected_rebar} with {hook_type} (Effective Area = {actual_area:.2f} {unit_as} with {bar_tolerance_pct}% tolerance)<br/>"
+                f"Bar Count Calculation: N = ceil(A<sub>s,req</sub> / A<sub>bar</sub>) = ceil({As_req:.2f} / {actual_area:.2f}) = {num_bars_x} Bars<br/>"
+                f"Spacing Calculation: s = (L - 2xCover) / (N - 1) = {spacing_x:.1f} {spacing_unit} c/c (Cover = {cover*(12 if is_imperial else 1000):.1f} {u_rebar})"
+            )
+            story.append(Paragraph(math_4b, math_code_style))
+
+            story.append(Paragraph(
+                f"FINAL SPECIFICATION: Provide {num_bars_x} Nos - {selected_rebar} with {hook_type} @ {spacing_x} {spacing_unit} c/c (Both Ways)",
+                final_spec_style
+            ))
+            story.append(Spacer(1, 10))
+
+            story.append(Paragraph("5. Structural Detailing Drawings", h1_sec_style))
+            img_sec = RLImage(sec_buf, width=240, height=160)
+            img_plan = RLImage(plan_buf, width=240, height=160)
+            img_table = Table([[img_sec, img_plan]], colWidths=[255, 255])
+            story.append(img_table)
+
+            doc.build(story)
+            pdf_buf.seek(0)
+            return pdf_buf
+
+        sec_img = draw_cross_section()
+        plan_img = draw_plan_view()
+        pdf_file = generate_pdf_report(sec_img, plan_img)
+
+        with col_res:
+            st.header("📊 Results & Verification Summary")
+            st.subheader("1. Eccentricity & Soil Pressure")
+            st.metric("Total Unfactored P", f"{P_unfactored:.2f} {u_force} (DL: {P_DL}, LL: {P_LL})")
+            st.metric("Max Pressure (q_max)", f"{q_max_service:.2f} {u_stress}", delta="✅ SAFE" if q_max_service <= q_allow else "❌ OVERLOADED")
+
+            st.subheader("2. Structural Shears Check")
+            s1, s2 = st.columns(2)
+            s1.metric("Punching Shear", f"{Vu_punch:.1f} / {Phi_Vc_punch:.1f}", delta="✅ PASS" if Phi_Vc_punch >= Vu_punch else "❌ FAIL")
+            s2.metric("One-Way Shear", f"{Vu_oneway:.1f} / {Phi_Vc_oneway:.1f}", delta="✅ PASS" if Phi_Vc_oneway >= Vu_oneway else "❌ FAIL")
+
+            st.subheader("3. Reinforcement Arrangement")
+            st.markdown(f"• **x-direction Steel:** Provide **{num_bars_x} Nos - {selected_rebar}** @ **{spacing_x} {spacing_unit} c/c**")
+            st.markdown(f"• **y-direction Steel:** Provide **{num_bars_y} Nos - {selected_rebar}** @ **{spacing_y} {spacing_unit} c/c**")
+
+            st.subheader("4. Detailing Drawings")
+            st.image(sec_img, caption="Footing Elevation Section (Ground to Base = Df)")
+            st.image(plan_img, caption="Footing Plan Top View with Dimensions & Rebar Layout")
+
+            st.markdown("---")
+            st.download_button(
+                label="📄 Download Detailed Calculation PDF Report",
+                data=pdf_file,
+                file_name="Detailed_Footing_Design_Report.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
+
+# ----------------------------------------------------
+# 4. CONTINUOUS WALL FOOTING PAGE
+# ----------------------------------------------------
+elif selected == "Continuous Wall Footing":
+    st.title("🧱 Continuous RC Wall Footing Design Suite")
+
+    col_in, col_res = st.columns([1.1, 1.1])
+
+    with col_in:
+        st.header("1. General & Unit System Selection")
+        unit_system = st.radio(
+            "Unit System",
+            [
+                "SI Units (m, kN, kPa, mm)",
+                "Metric Ton System (m, ton, t/m², mm)",
+                "FPS - Kip System (ft, kips, ksf, in)",
+                "FPS - Ton System (ft, ton, tsf, in)",
+            ],
+            key="wall_unit"
+        )
+
+        is_imperial = "FPS" in unit_system
+        is_ton = "Ton" in unit_system
+
+        u_len = "ft" if is_imperial else "m"
+        u_force_per_len = "kips/ft" if (is_imperial and not is_ton) else ("ton/ft" if is_imperial and is_ton else ("ton/m" if is_ton else "kN/m"))
+        u_stress = "tsf" if (is_imperial and is_ton) else ("ksf" if is_imperial else ("t/m²" if is_ton else "kPa"))
+        u_gamma = "pcf" if is_imperial else ("t/m³" if is_ton else "kN/m³")
+        u_rebar = "in" if is_imperial else "mm"
+        u_fc = "psi" if is_imperial else "MPa"
+
+        geo_mode = st.radio(
+            "Geotechnical Input Option",
+            [
+                "Direct Gross Allowable Soil Capacity (q_allow)",
+                "c-phi Parameters (Analytical - Terzaghi/Meyerhof)",
+                "SPT N-value (Empirical Method)",
+            ],
+            key="wall_geo_mode"
+        )
+
+        st.header("2. Applied Line Loads")
+        col_p1, col_p2 = st.columns(2)
+        P_dl = col_p1.number_input(f"Dead Load P_DL ({u_force_per_len})", 0.0, 5000.0, 100.0 if not is_imperial else 8.0, key="wall_pdl")
+        P_ll = col_p2.number_input(f"Live Load P_LL ({u_force_per_len})", 0.0, 5000.0, 50.0 if not is_imperial else 4.0, key="wall_pll")
+
+        st.header("3. Geotechnical Soil Parameters Mode")
+        if "Direct" in geo_mode:
+            q_allow_input = st.number_input(f"Gross Allowable Soil Cap. q_allow ({u_stress})", 1.0, 10000.0, 150.0 if not is_imperial else 3.0, key="wall_qallow")
+            c_val, phi_val, n_spt, FS = 0.0, 0.0, 0, 3.0
+        elif "c-phi" in geo_mode:
+            col_c1, col_c2 = st.columns(2)
+            c_val = col_c1.number_input(f"Cohesion c ({u_stress})", 0.0, 5000.0, 10.0 if not is_imperial else 0.2, key="wall_c")
+            phi_val = col_c2.number_input("Friction Angle φ (deg)", 0.0, 45.0, 28.0, key="wall_phi")
+            n_spt, q_allow_input = 0, None
+            FS = st.number_input("Safety Factor (FS)", 1.0, 10.0, 3.0, key="wall_fs_cphi")
+        else:
+            n_spt = st.number_input("SPT N-Value", 1, 100, 15, key="wall_nspt")
+            c_val, phi_val, q_allow_input = 0.0, 0.0, None
+            FS = st.number_input("Safety Factor (FS)", 1.0, 10.0, 3.0, key="wall_fs_spt")
+
+        st.header("4. Geometry Settings (Footing & Wall)")
+        col_g1, col_g2 = st.columns(2)
+        b_wall = col_g1.number_input(f"Wall Thickness b_w ({u_len})", 0.1, 5.0, 0.25 if not is_imperial else 0.833, key="wall_bw")
+        B = col_g2.number_input(f"Footing Width B ({u_len})", 0.5, 30.0, 1.8 if not is_imperial else 6.0, key="wall_b")
+
+        col_g3, col_g4 = st.columns(2)
+        h_foot = col_g3.number_input(f"Footing Thickness h ({u_len})", 0.1, 5.0, 0.40 if not is_imperial else 1.25, key="wall_h")
+        Df = col_g4.number_input(f"Embedment Depth Df ({u_len})", 0.0, 20.0, 1.2 if not is_imperial else 4.0, key="wall_df")
+
+        col_s1, col_s2 = st.columns(2)
+        gamma_soil = col_s1.number_input(f"Soil γ ({u_gamma})", 0.0, 300.0, 18.0 if not is_imperial else 115.0, key="wall_gamma")
+        Dw = col_s2.number_input(f"Water Table Depth Dw ({u_len})", 0.0, 50.0, 1.0 if not is_imperial else 3.5, key="wall_dw")
+
+        st.header("5. Structural & Rebar Details")
+        aci_version = st.selectbox("ACI Standard Code", ["ACI 318-22", "ACI 318-19", "ACI 318-14", "ACI 318-11"], key="wall_aci")
+        col_m1, col_m2 = st.columns(2)
+        fc = col_m1.number_input(f"Concrete f'c ({u_fc})", 10.0, 10000.0, 28.0 if not is_imperial else 4000.0, key="wall_fc")
+        fy = col_m2.number_input(f"Steel fy ({u_fc})", 100.0, 100000.0, 420.0 if not is_imperial else 60000.0, key="wall_fy")
+
+        rebar_system = st.radio("Rebar Unit System Standard", ["Metric Sizes (mm)", "Imperial Sizes (# / in)"], key="wall_rebar_sys")
+        if "Metric" in rebar_system:
+            main_rebar_opts = {
+                "16 mm": {"dia": 16.0, "area": 201.1},
+                "18 mm": {"dia": 18.0, "area": 254.5},
+                "20 mm": {"dia": 20.0, "area": 314.2},
+                "22 mm": {"dia": 22.0, "area": 380.1},
+                "25 mm": {"dia": 25.0, "area": 490.9},
+            }
+            temp_rebar_opts = {
+                "10 mm": {"dia": 10.0, "area": 78.5},
+                "12 mm": {"dia": 12.0, "area": 113.1},
+                "16 mm": {"dia": 16.0, "area": 201.1},
+                "18 mm": {"dia": 18.0, "area": 254.5},
+                "20 mm": {"dia": 20.0, "area": 314.2},
+                "22 mm": {"dia": 22.0, "area": 380.1},
+                "25 mm": {"dia": 25.0, "area": 490.9},
+            }
+        else:
+            main_rebar_opts = {
+                "#5 (0.625 in)": {"dia": 0.625, "area": 0.31},
+                "#6 (0.750 in)": {"dia": 0.750, "area": 0.44},
+                "#7 (0.875 in)": {"dia": 0.875, "area": 0.60},
+                "#8 (1.000 in)": {"dia": 1.000, "area": 0.79},
+            }
+            temp_rebar_opts = {
+                "#3 (0.375 in)": {"dia": 0.375, "area": 0.11},
+                "#4 (0.500 in)": {"dia": 0.500, "area": 0.20},
+                "#5 (0.625 in)": {"dia": 0.625, "area": 0.31},
+                "#6 (0.750 in)": {"dia": 0.750, "area": 0.44},
+            }
+
+        col_r1, col_r2 = st.columns(2)
+        selected_main_bar = col_r1.selectbox("Main Rebar (Transverse)", list(main_rebar_opts.keys()), key="wall_main_rebar")
+        selected_temp_bar = col_r2.selectbox("Temperature & Shrinkage Rebar", list(temp_rebar_opts.keys()), key="wall_temp_rebar")
+
+        hook_type = st.radio("Rebar End Hook Type", ["None (Straight Bar)", "90-Degree Standard Hook", "180-Degree Standard Hook"], key="wall_hook")
+
+        calc_trigger = st.button("🚀 Calculate Continuous Wall Footing", type="primary", use_container_width=True, key="wall_calc_btn")
+
+    if calc_trigger or "wall_calc_state" in st.session_state:
+        st.session_state["wall_calc_state"] = True
+
+        gamma_w = 62.4 if is_imperial else (1.0 if is_ton else 9.81)
+        gamma_conc = 150.0 if is_imperial else (2.4 if is_ton else 24.0)
+        unit_div = (1000.0 if not is_ton else 2000.0) if is_imperial else 1.0
+
+        if Dw >= Df + h_foot:
+            surcharge = ((Df * gamma_soil) + (h_foot * gamma_conc)) / unit_div
+        else:
+            d_dry = min(Df, Dw)
+            d_sat = Df - d_dry
+            surcharge = ((d_dry * gamma_soil) + (d_sat * (gamma_soil - gamma_w)) + (h_foot * (gamma_conc - gamma_w))) / unit_div
+
+        if "Direct" in geo_mode:
+            q_allow = q_allow_input
+        elif "c-phi" in geo_mode:
+            rad_phi = np.radians(phi_val)
+            if phi_val > 0:
+                Nq = np.exp(np.pi * np.tan(rad_phi)) * (np.tan(np.radians(45 + phi_val / 2))) ** 2
+                Nc = (Nq - 1) / np.tan(rad_phi)
+                Ng = 2 * (Nq + 1) * np.tan(rad_phi)
+            else:
+                Nc, Nq, Ng = 5.14, 1.0, 0.0
+            q_ult = (c_val * Nc) + (surcharge * Nq) + (0.5 * gamma_soil * B * Ng)
+            q_allow = q_ult / FS
+        else:
+            Kd = min(1.33, 1 + 0.33 * (Df / B))
+            if is_imperial:
+                q_allow = (n_spt / 4.0) * (1.0 if is_ton else 2.0) * Kd
+            else:
+                q_allow = (n_spt * 1.2 if is_ton else n_spt / 0.05) * Kd
+
+        q_net_allow = max(0.001, q_allow - surcharge)
+        P_service = P_dl + P_ll
+        q_service_actual = P_service / B
+
+        Pu = (1.2 * P_dl) + (1.6 * P_ll)
+        qu_factored = Pu / B
+
+        cover = (3.0 / 12.0) if is_imperial else 0.075
+        d_eff = h_foot - cover
+
+        cantilever_arm = (B - b_wall) / 2.0
+        crit_shear_dist = cantilever_arm - d_eff
+        Vu_oneway = qu_factored * max(0.0, crit_shear_dist)
+
+        lambda_s = min(1.0, np.sqrt(2.0 / (1.0 + 0.004 * (d_eff * (1000.0 if not is_imperial else 304.8))))) if aci_version in ["ACI 318-19", "ACI 318-22"] else 1.0
+
+        phi_shear = 0.75
+        if not is_imperial:
+            vc = 0.17 * lambda_s * np.sqrt(fc)
+            Phi_Vc = (phi_shear * vc * 1000.0 * (d_eff * 1000.0) / 1000.0) * (1.0 / 9.81 if is_ton else 1.0)
+        else:
+            vc = 2.0 * lambda_s * np.sqrt(fc)
+            Phi_Vc = (phi_shear * vc * 12.0 * (d_eff * 12.0) / 1000.0) * (0.5 if is_ton else 1.0)
+
+        Mu = (qu_factored * (cantilever_arm**2)) / 2.0
+
+        if not is_imperial:
+            b_mm, d_mm_val = 1000.0, d_eff * 1000.0
+            h_mm_val = h_foot * 1000.0
+            Mu_Nmm = Mu * 1e6 * (9.81 if is_ton else 1.0)
+            Rn = Mu_Nmm / (0.9 * b_mm * (d_mm_val**2))
+            rho_calc = (0.85 * fc / fy) * (1.0 - np.sqrt(max(0.0, 1.0 - (2.0 * Rn) / (0.85 * fc))))
+            
+            rho_min = 0.0018
+            rho_req = max(rho_calc, rho_min)
+            
+            main_bar_area = main_rebar_opts[selected_main_bar]["area"] if "Metric" in rebar_system else main_rebar_opts[selected_main_bar]["area"] * 645.16
+            temp_bar_area = temp_rebar_opts[selected_temp_bar]["area"] if "Metric" in rebar_system else temp_rebar_opts[selected_temp_bar]["area"] * 645.16
+
+            As_main_req = rho_req * b_mm * d_mm_val
+            As_temp_req = 0.0018 * b_mm * h_mm_val
+            spacing_unit = "mm"
+        else:
+            b_in, d_in_val = 12.0, d_eff * 12.0
+            h_in_val = h_foot * 12.0
+            Mu_inlbs = Mu * 12000.0 * (2.0 if is_ton else 1.0)
+            Rn = Mu_inlbs / (0.9 * b_in * (d_in_val**2))
+            rho_calc = (0.85 * fc / fy) * (1.0 - np.sqrt(max(0.0, 1.0 - (2.0 * Rn) / (0.85 * fc))))
+            
+            rho_min = 0.0018
+            rho_req = max(rho_calc, rho_min)
+            
+            main_bar_area = main_rebar_opts[selected_main_bar]["area"] if "Imperial" in rebar_system else main_rebar_opts[selected_main_bar]["area"] / 645.16
+            temp_bar_area = temp_rebar_opts[selected_temp_bar]["area"] if "Imperial" in rebar_system else temp_rebar_opts[selected_temp_bar]["area"] / 645.16
+
+            As_main_req = rho_req * b_in * d_in_val
+            As_temp_req = 0.0018 * b_in * h_in_val
+            spacing_unit = "in"
+
+        s_main = (main_bar_area / As_main_req) * (1000.0 if not is_imperial else 12.0)
+        s_temp = (temp_bar_area / As_temp_req) * (1000.0 if not is_imperial else 12.0)
+
+        max_s_temp = min(5 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)
+
+        s_main_final = int(min(s_main, min(3 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)))
+        s_temp_final = int(min(s_temp, max_s_temp))
+
+        raw_db = main_rebar_opts[selected_main_bar]["dia"]
+        if is_imperial:
+            db_calc = raw_db if "Imperial" in rebar_system else (raw_db / 25.4)
+        else:
+            db_calc = raw_db if "Metric" in rebar_system else (raw_db * 25.4)
+
+        L_avail_val = cantilever_arm - cover
+
+        if not is_imperial:
+            L_avail_disp = L_avail_val * 1000.0
+            ld_straight = (fy / (1.1 * np.sqrt(fc))) * db_calc
+            ld_hook = (0.24 * fy / np.sqrt(fc)) * db_calc
+            u_ld = "mm"
+        else:
+            L_avail_disp = L_avail_val * 12.0
+            ld_straight = (fy / (25.0 * np.sqrt(fc))) * db_calc
+            ld_hook = (0.02 * fy / np.sqrt(fc)) * db_calc
+            u_ld = "in"
+
+        ld_req = ld_hook if "Hook" in hook_type else ld_straight
+        ld_status = L_avail_disp >= ld_req
+
+        def draw_footing_section():
+            fig, ax = plt.subplots(figsize=(6.5, 4.5))
+            f_top, f_bottom = -Df, -Df - h_foot
+
+            ax.fill_between([-B / 2 - 1.0, B / 2 + 1.0], [0, 0], [f_bottom - 0.4, f_bottom - 0.4], color="#E5D3B3", alpha=0.5)
+            ax.plot([-B / 2 - 1.0, B / 2 + 1.0], [0, 0], "k--", linewidth=1, label="Ground Level (GL)")
+            
+            footing_rect = patches.Rectangle((-B / 2, f_bottom), B, h_foot, facecolor="#9CA3AF", edgecolor="black", linewidth=1.5, label="Footing")
+            wall_rect = patches.Rectangle((-b_wall / 2, f_top), b_wall, Df + 0.4, facecolor="#4B5563", edgecolor="black", linewidth=1.5, label="RC Wall")
+            
+            ax.add_patch(footing_rect)
+            ax.add_patch(wall_rect)
+
+            main_y = f_bottom + cover
+            left_x, right_x = -B / 2 + cover, B / 2 - cover
+            
+            ax.plot([left_x, right_x], [main_y, main_y], color="red", linewidth=2.0, label=f"Main Bar: {selected_main_bar}")
+
+            if "90-Degree" in hook_type:
+                hook_len = 0.1 if not is_imperial else 0.3
+                ax.plot([left_x, left_x], [main_y, main_y + hook_len], color="red", linewidth=2.0)
+                ax.plot([right_x, right_x], [main_y, main_y + hook_len], color="red", linewidth=2.0)
+
+            elif "180-Degree" in hook_type:
+                r_hook = 0.04 if not is_imperial else 0.12
+                tail_len = 0.05 if not is_imperial else 0.15
+
+                theta_left = np.linspace(1.5 * np.pi, 0.5 * np.pi, 30)
+                x_arc_left = left_x + r_hook * np.cos(theta_left)
+                y_arc_left = (main_y + r_hook) + r_hook * np.sin(theta_left)
+
+                ax.plot(x_arc_left, y_arc_left, color="red", linewidth=2.0)
+                ax.plot([left_x, left_x + tail_len], 
+                        [main_y + 2 * r_hook, main_y + 2 * r_hook], color="red", linewidth=2.0)
+
+                theta_right = np.linspace(1.5 * np.pi, 0.5 * np.pi, 30)
+                x_arc_right = right_x - r_hook * np.cos(theta_right)
+                y_arc_right = (main_y + r_hook) + r_hook * np.sin(theta_right)
+
+                ax.plot(x_arc_right, y_arc_right, color="red", linewidth=2.0)
+                ax.plot([right_x, right_x - tail_len], 
+                        [main_y + 2 * r_hook, main_y + 2 * r_hook], color="red", linewidth=2.0)
+
+            dot_x_coords = np.linspace(left_x + 0.08, right_x - 0.08, 7)
+            ax.scatter(dot_x_coords, [main_y + 0.03] * 7, color="darkblue", s=25, zorder=5, label=f"Temp/Shrinkage Bar: {selected_temp_bar}")
+
+            ax.set_xlim(-B / 2 - 0.8, B / 2 + 0.8)
+            ax.set_ylim(f_bottom - 0.6, 0.5)
+            ax.set_aspect("equal")
+            ax.axis("off")
+            
+            ax.legend(loc="upper right", fontsize=6.0)
+            plt.title(f"Footing Elevation Section ({hook_type})", fontsize=9, fontweight="bold")
+            plt.tight_layout()
+
+            buf = io.BytesIO()
+            plt.savefig(buf, format="png", dpi=200, bbox_inches="tight")
+            buf.seek(0)
+            plt.close()
+            return buf
+
+        def draw_footing_plan():
+            fig, ax = plt.subplots(figsize=(6.5, 6.5))
+            unit_len_display = 2.0 if not is_imperial else 6.0
+            
+            foot_plan = patches.Rectangle((-B / 2, -unit_len_display / 2), B, unit_len_display, facecolor="#E5E7EB", edgecolor="#1F2937", linewidth=2, label="Footing Plan")
+            wall_plan = patches.Rectangle((-b_wall / 2, -unit_len_display / 2), b_wall, unit_len_display, facecolor="#4B5563", edgecolor="black", linewidth=1.5, label="Wall Above")
+            
+            ax.add_patch(foot_plan)
+            ax.add_patch(wall_plan)
+
+            y_lines = np.linspace(-unit_len_display / 2 + 0.1, unit_len_display / 2 - 0.1, 8)
+            for idx, y_pos in enumerate(y_lines):
+                ax.plot([-B / 2 + cover, B / 2 - cover], [y_pos, y_pos], color="red", linewidth=1.5, label="Transverse Rebar" if idx == 0 else "")
+
+            x_lines = np.linspace(-B / 2 + cover + 0.05, B / 2 - cover - 0.05, 7)
+            for idx, x_pos in enumerate(x_lines):
+                ax.plot([x_pos, x_pos], [-unit_len_display / 2 + 0.05, unit_len_display / 2 - 0.05], color="darkblue", linestyle="--", linewidth=1.2, label="Longitudinal Rebar" if idx == 0 else "")
+
+            ax.set_xlim(-B / 2 - 0.5, B / 2 + 0.5)
+            ax.set_ylim(-unit_len_display / 2 - 0.4, unit_len_display / 2 + 0.4)
+            ax.set_aspect("equal")
+            ax.axis("off")
+            
+            cover_val_disp = cover * (12.0 if is_imperial else 1000.0)
+            plt.title(f"Footing Structural Top Plan View (Cover = {cover_val_disp:.1f} {u_rebar})", fontsize=9, fontweight="bold")
+            plt.tight_layout()
+
+            buf = io.BytesIO()
+            plt.savefig(buf, format="png", dpi=200, bbox_inches="tight")
+            buf.seek(0)
+            plt.close()
+            return buf
+
+        def generate_pdf_report(sec_buf, plan_buf):
+            pdf_buf = io.BytesIO()
+            doc = SimpleDocTemplate(
+                pdf_buf, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36
+            )
+            styles = getSampleStyleSheet()
+
+            main_title_style = ParagraphStyle(
+                'MainTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=15, leading=19, textColor=colors.HexColor("#1A365D"), spaceAfter=6
+            )
+            sub_title_style = ParagraphStyle(
+                'SubTitle', parent=styles['Normal'], fontName='Helvetica', fontSize=8.5, leading=12, textColor=colors.HexColor("#2D3748"), spaceAfter=10
+            )
+            h1_sec_style = ParagraphStyle(
+                'H1Sec', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=11, leading=15, textColor=colors.HexColor("#000000"), spaceBefore=8, spaceAfter=4
+            )
+            bullet_style = ParagraphStyle(
+                'BulletText', parent=styles['Normal'], fontName='Helvetica', fontSize=8.5, leading=12, textColor=colors.HexColor("#1A202C")
+            )
+            math_code_style = ParagraphStyle(
+                'MathCode', parent=styles['Normal'], fontName='Courier', fontSize=8.0, leading=11, textColor=colors.HexColor("#2C5282")
+            )
+
+            story = []
+
+            story.append(Paragraph("STRUCTURAL & GEOTECHNICAL CONTINUOUS WALL FOOTING DESIGN REPORT", main_title_style))
+            story.append(Paragraph(
+                f"Code Standard: <b>{aci_version}</b> | Unit System: <b>{unit_system}</b> | Hook Type: <b>{hook_type}</b>",
+                sub_title_style
+            ))
+
+            story.append(Paragraph("1. Applied Loads & Geometric Parameters", h1_sec_style))
+            story.append(Paragraph(f"• Dead Load (P_DL) = {P_dl:.2f} {u_force_per_len} | Live Load (P_LL) = {P_ll:.2f} {u_force_per_len}", bullet_style))
+            story.append(Paragraph(f"• Factored Line Load Pu = 1.2({P_dl:.2f}) + 1.6({P_ll:.2f}) = <b>{Pu:.2f} {u_force_per_len}</b>", bullet_style))
+            story.append(Paragraph(f"• Footing Width (B) = {B:.2f} {u_len} | Thickness (h) = {h_foot:.2f} {u_len} | Wall Width (b_w) = {b_wall:.2f} {u_len}", bullet_style))
+
+            story.append(Paragraph("2. Geotechnical Bearing Capacity Checks", h1_sec_style))
+            story.append(Paragraph(f"• Soil Surcharge Pressure (q_surcharge) = {surcharge:.2f} {u_stress}", bullet_style))
+            story.append(Paragraph(f"• Net Allowable Bearing Capacity (q_net_allow) = {q_net_allow:.2f} {u_stress}", bullet_style))
+            story.append(Paragraph(f"• Actual Service Soil Pressure q_service = {P_service:.2f} / {B:.2f} = <b>{q_service_actual:.2f} {u_stress}</b>", bullet_style))
+            status_geo = "SAFE" if q_service_actual <= q_net_allow else "OVERLOADED"
+            story.append(Paragraph(f"• Geotechnical Bearing Status: <b>[{status_geo}]</b>", bullet_style))
+
+            story.append(Paragraph("3. One-Way Shear Verification (ACI 318)", h1_sec_style))
+            math_shear = (
+                f"Factored Pressure qu = Pu / B = {qu_factored:.2f} {u_stress}<br/>"
+                f"Cantilever Arm = (B - b_w) / 2 = {cantilever_arm:.3f} {u_len}<br/>"
+                f"Critical Section Distance = Cantilever - d = {max(0.0, crit_shear_dist):.3f} {u_len}<br/>"
+                f"Vu,oneway = {Vu_oneway:.2f} {u_force_per_len} | Shear Capacity φVc = {Phi_Vc:.2f} {u_force_per_len}"
+            )
+            story.append(Paragraph(math_shear, math_code_style))
+            status_shear = "PASS" if Phi_Vc >= Vu_oneway else "FAIL"
+            story.append(Paragraph(f"• One-Way Shear Status: <b>[{status_shear}]</b>", bullet_style))
+
+            story.append(Paragraph("4. Flexural Reinforcement Derivations", h1_sec_style))
+            math_flex = (
+                f"Factored Moment Mu = (qu * Cantilever^2) / 2 = {Mu:.2f} {u_force_per_len}*{u_len}<br/>"
+                f"Calculated Steel Ratio ρ_calc = {rho_calc:.6f}<br/>"
+                f"Minimum Temperature & Shrinkage Ratio ρ_min = {rho_min:.6f}<br/>"
+                f"Governing Steel Ratio ρ_req = max(ρ_calc, ρ_min) = {rho_req:.6f}"
+            )
+            story.append(Paragraph(math_flex, math_code_style))
+            story.append(Paragraph(f"• Main Transverse Rebar: <b>{selected_main_bar} @ {s_main_final} {spacing_unit} c/c</b> ({hook_type})", bullet_style))
+            story.append(Paragraph(f"• Temperature & Shrinkage Rebar: <b>{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c</b>", bullet_style))
+
+            story.append(Paragraph("5. Rebar Development Length Verification (ACI 318)", h1_sec_style))
+            math_dev = (
+                f"Available Anchorage Length (L_avail) = Cantilever - Cover = {L_avail_disp:.1f} {u_ld}<br/>"
+                f"Required Development Length (L_d / L_dh) = {ld_req:.1f} {u_ld}"
+            )
+            story.append(Paragraph(math_dev, math_code_style))
+            status_ld_str = "PASS" if ld_status else "FAIL (Hook or Larger Width Required)"
+            story.append(Paragraph(f"• Development Length Status: <b>[{status_ld_str}]</b>", bullet_style))
+
+            story.append(Spacer(1, 6))
+            story.append(Paragraph("6. Structural Detailing Drawings", h1_sec_style))
+            
+            img_sec = RLImage(sec_buf, width=240, height=160)
+            img_plan = RLImage(plan_buf, width=240, height=160)
+            
+            img_table = Table([[img_sec, img_plan]], colWidths=[255, 255])
+            img_table.setStyle([
+                ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+                ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+            ])
+            story.append(img_table)
+
+            doc.build(story)
+            pdf_buf.seek(0)
+            return pdf_buf
+
+        sec_img = draw_footing_section()
+        plan_img = draw_footing_plan()
+        pdf_file = generate_pdf_report(sec_img, plan_img)
+
+        with col_res:
+            st.header("📊 Results & Verification Summary")
+            
+            st.subheader("1. Eccentricity & Soil Pressure")
+            st.metric("Total Service P", f"{P_service:.2f} {u_force_per_len} (DL: {P_dl}, LL: {P_ll})")
+            st.metric("Actual Service Pressure", f"{q_service_actual:.2f} {u_stress}", delta="✅ SAFE" if q_service_actual <= q_net_allow else "❌ OVERLOADED")
+
+            st.subheader("2. Structural Shears Check")
+            st.metric("One-Way Shear (Vu / φVc)", f"{Vu_oneway:.1f} / {Phi_Vc:.1f} {u_force_per_len}", delta="✅ PASS" if Phi_Vc >= Vu_oneway else "❌ FAIL")
+
+            st.subheader("3. Reinforcement Arrangement")
+            st.markdown(f"• **Main Steel:** Provide **{selected_main_bar} @ {s_main_final} {spacing_unit} c/c** ({hook_type})")
+            st.markdown(f"• **Temp/Shrinkage Steel:** Provide **{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c**")
+
+            st.subheader("4. Development Length Verification ($L_d$)")
+            st.metric(
+                f"Available Length vs Req. Length ({u_ld})",
+                f"{L_avail_disp:.1f} / {ld_req:.1f} {u_ld}",
+                delta="✅ PASS (Adequate Anchorage)" if ld_status else "❌ FAIL (Provide Hook or Increase B)"
+            )
+
+            st.subheader("5. Detailing Drawings")
+            st.image(sec_img, caption="Footing Elevation Cross-Section Diagram")
+            st.image(plan_img, caption="Footing Top Structural Plan View")
+
+            st.markdown("---")
+            st.download_button(
+                label="📄 Download Detailed Calculation PDF Report",
+                data=pdf_file,
+                file_name="Continuous_Wall_Footing_Report.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )
 
