@@ -276,16 +276,16 @@ st.info(f"""
 * **Liquidity Index (LI):** `{LI:.2f}` (State: {state_str})
 * **Consistency Index (CI):** `{CI:.2f}`
 """)
-    
-    st.subheader("📉 Particle Size Distribution Curve")
-    fig_psd = plot_psd_curve(d_arr, p_arr)
-    st.pyplot(fig_psd)
-    
-    st.subheader("📈 Plasticity Chart (ASTM D2487)")
-    fig_plast = plot_plasticity_chart(LL, PI)
-    st.pyplot(fig_plast)
-    
-    st.subheader("🧱 Composition Breakdown")
+
+st.subheader("📈 Particle Size Distribution Curve")
+fig_psd = plot_psd_curve(d_arr, p_arr)
+st.pyplot(fig_psd)
+
+st.subheader("📈 Plasticity Chart (ASTM D2487)")
+fig_plast = plot_plasticity_chart(LL, PI)
+st.pyplot(fig_plast)
+
+st.subheader("🧱 Composition Breakdown")
     fig_bar, ax_bar = plt.subplots(figsize=(7, 1.5))
     comps = ['Gravel', 'Sand', 'Silt', 'Clay']
     vals = [gravel, sand, silt, clay]
