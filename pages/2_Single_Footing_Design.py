@@ -119,10 +119,7 @@ with col_in:
     Dw = st.number_input(f"Water Table Depth Dw ({u_len})", 0.0, 50.0, 0.8 if not is_imperial else 2.5)
 
     st.header("5. Structural & Rebar Details")
-    aci_version = st.selectbox(
-        "ACI 318 Code Standard", 
-        ["ACI 318-22", "ACI 318-19", "ACI 318-14", "ACI 318-11", "ACI 318-08", "ACI 318-05"]
-    )
+    aci_version = st.selectbox("ACI 318 Code Standard", ["ACI 318-22", "ACI 318-19", "ACI 318-14", "ACI 318-11"])
 
     u_fc = "psi" if is_imperial else "MPa"
     fc = st.number_input(f"Concrete Strength f'c ({u_fc})", 10.0, 10000.0, 28.0 if not is_imperial else 4000.0)
@@ -271,7 +268,7 @@ if calc_trigger or "calculated" in st.session_state:
         Phi_Vc_punch = ((phi_s * vc_punch * (bo * 12) * (d_eff * 12)) / 1000.0) * force_mult
         Phi_Vc_oneway = ((phi_s * vc_oneway * (L * 12) * (d_eff * 12)) / 1000.0) * force_mult
 
-    # Reinforcement Calculation
+    # Reinforcement Calculation (Updated Conservative Beam Minimum Included)
     Mu_x = (qu_factored * L * (cantilever_x**2)) / 2
     Mu_y = (qu_factored * B * (cantilever_y**2)) / 2
 
@@ -349,14 +346,16 @@ if calc_trigger or "calculated" in st.session_state:
         hook_len = 0.12 if not is_imperial else 0.4
         # Rebar Hook Drawing Logic
         if "90-Degree" in hook_type:
+            # Vertical legs for 90-degree standard hooks
             hook_len = 0.1 if not is_imperial else 0.3
             ax.plot([left_x, left_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
             ax.plot([right_x, right_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
 
         elif "180-Degree" in hook_type:
-            r_hook = 0.04 if not is_imperial else 0.12
-            tail_len = 0.05 if not is_imperial else 0.15
+            r_hook = 0.04 if not is_imperial else 0.12  # Radius of bend
+            tail_len = 0.05 if not is_imperial else 0.15 # Extension tail length
 
+            # Left Hook (Arc bending UP and INWARDS + Extension Tail)
             theta_left = np.linspace(1.5 * np.pi, 0.5 * np.pi, 30)
             x_arc_left = left_x + r_hook * np.cos(theta_left)
             y_arc_left = (rebar_y_xdir + r_hook) + r_hook * np.sin(theta_left)
@@ -365,6 +364,7 @@ if calc_trigger or "calculated" in st.session_state:
             ax.plot([left_x, left_x + tail_len], 
                     [rebar_y_xdir + 2 * r_hook, rebar_y_xdir + 2 * r_hook], color="red", linewidth=2.0)
 
+            # Right Hook (Arc bending UP and INWARDS + Extension Tail)
             theta_right = np.linspace(-0.5 * np.pi, 0.5 * np.pi, 30)
             x_arc_right = right_x + r_hook * np.cos(theta_right)
             y_arc_right = (rebar_y_xdir + r_hook) + r_hook * np.sin(theta_right)
@@ -374,6 +374,7 @@ if calc_trigger or "calculated" in st.session_state:
                     [rebar_y_xdir + 2 * r_hook, rebar_y_xdir + 2 * r_hook], color="red", linewidth=2.0)
 
         else:
+            # None or Straight Bars (No hook required)
             pass
 
         x_coords = np.linspace(left_x, right_x, num_bars_x)
