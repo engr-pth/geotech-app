@@ -228,7 +228,7 @@ if calc_trigger or "wall_calc_state" in st.session_state:
     s_main_final = int(min(s_main, min(3 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)))
     s_temp_final = int(min(s_temp, max_s_temp))
 
-    # --- 180-degree Hook Elevation Drawing ---
+    # --- Refined Hook Drawing Logic (Curved Arc 180° Hooks) ---
     def draw_footing_section():
         fig, ax = plt.subplots(figsize=(7, 4.5))
         f_top, f_bottom = -Df, -Df - h_foot
@@ -245,30 +245,39 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         main_y = f_bottom + cover
         left_x, right_x = -B / 2 + cover, B / 2 - cover
         
-        ax.plot([left_x, right_x], [main_y, main_y], color="red", linewidth=2.5, label=f"Main Bar: {selected_main_bar}")
+        # Draw Main Straight Bar
+        ax.plot([left_x, right_x], [main_y, main_y], color="red", linewidth=2.0, label=f"Main Bar: {selected_main_bar}")
 
-        hook_h = 0.12 if not is_imperial else 0.4
-        hook_r = 0.03 if not is_imperial else 0.1
-        
         if "90-Degree" in hook_type:
-            ax.plot([left_x, left_x], [main_y, main_y + hook_h], color="red", linewidth=2.5)
-            ax.plot([right_x, right_x], [main_y, main_y + hook_h], color="red", linewidth=2.5)
-        elif "180-Degree" in hook_type:
-            # Left 180 Hook
-            ax.plot([left_x, left_x], [main_y, main_y + hook_h], color="red", linewidth=2.5)
-            ax.plot([left_x, left_x + hook_r], [main_y + hook_h, main_y + hook_h + hook_r], color="red", linewidth=2.5)
-            ax.plot([left_x + hook_r, left_x + 2 * hook_r], [main_y + hook_h + hook_r, main_y + hook_h], color="red", linewidth=2.5)
-            ax.plot([left_x + 2 * hook_r, left_x + 2 * hook_r], [main_y + hook_h, main_y + 0.02], color="red", linewidth=2.5)
+            hook_len = 0.1 if not is_imperial else 0.3
+            ax.plot([left_x, left_x], [main_y, main_y + hook_len], color="red", linewidth=2.0)
+            ax.plot([right_x, right_x], [main_y, main_y + hook_len], color="red", linewidth=2.0)
 
-            # Right 180 Hook
-            ax.plot([right_x, right_x], [main_y, main_y + hook_h], color="red", linewidth=2.5)
-            ax.plot([right_x, right_x - hook_r], [main_y + hook_h, main_y + hook_h + hook_r], color="red", linewidth=2.5)
-            ax.plot([right_x - hook_r, right_x - 2 * hook_r], [main_y + hook_h + hook_r, main_y + hook_h], color="red", linewidth=2.5)
-            ax.plot([right_x - 2 * hook_r, right_x - 2 * hook_r], [main_y + hook_h, main_y + 0.02], color="red", linewidth=2.5)
+        elif "180-Degree" in hook_type:
+            r_hook = 0.04 if not is_imperial else 0.12
+            tail_len = 0.05 if not is_imperial else 0.15
+
+            # Left Hook (Arc bending UP and INWARDS + Extension Tail)
+            theta_left = np.linspace(1.5 * np.pi, 0.5 * np.pi, 30)
+            x_arc_left = left_x + r_hook * np.cos(theta_left)
+            y_arc_left = (main_y + r_hook) + r_hook * np.sin(theta_left)
+
+            ax.plot(x_arc_left, y_arc_left, color="red", linewidth=2.0)
+            ax.plot([left_x, left_x + tail_len], 
+                    [main_y + 2 * r_hook, main_y + 2 * r_hook], color="red", linewidth=2.0)
+
+            # Right Hook (Arc bending UP and INWARDS + Extension Tail)
+            theta_right = np.linspace(1.5 * np.pi, 0.5 * np.pi, 30)
+            x_arc_right = right_x - r_hook * np.cos(theta_right)
+            y_arc_right = (main_y + r_hook) + r_hook * np.sin(theta_right)
+
+            ax.plot(x_arc_right, y_arc_right, color="red", linewidth=2.0)
+            ax.plot([right_x, right_x - tail_len], 
+                    [main_y + 2 * r_hook, main_y + 2 * r_hook], color="red", linewidth=2.0)
 
         # Distribution Steel Dots
-        dot_x_coords = np.linspace(left_x + 0.1, right_x - 0.1, 7)
-        ax.scatter(dot_x_coords, [main_y + 0.03] * 7, color="darkblue", s=30, zorder=5, label=f"Temp/Shrinkage Bar: {selected_temp_bar}")
+        dot_x_coords = np.linspace(left_x + 0.08, right_x - 0.08, 7)
+        ax.scatter(dot_x_coords, [main_y + 0.03] * 7, color="darkblue", s=25, zorder=5, label=f"Temp/Shrinkage Bar: {selected_temp_bar}")
 
         ax.set_xlim(-B / 2 - 0.8, B / 2 + 0.8)
         ax.set_ylim(f_bottom - 0.6, 0.5)
