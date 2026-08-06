@@ -15,7 +15,7 @@ from reportlab.platypus import (
 )
 from streamlit_option_menu import option_menu
 
-# Page Config Setup
+# Page Config Setup (Must be the very first Streamlit command)
 st.set_page_config(
     page_title="Geotechnical Suite",
     page_icon="🪨",
