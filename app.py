@@ -286,25 +286,24 @@ fig_plast = plot_plasticity_chart(LL, PI)
 st.pyplot(fig_plast)
 
 st.subheader("🧱 Composition Breakdown")
-    fig_bar, ax_bar = plt.subplots(figsize=(7, 1.5))
-    comps = ['Gravel', 'Sand', 'Silt', 'Clay']
-    vals = [gravel, sand, silt, clay]
-    clrs = ['#8d6e63', '#d4e157', '#4fc3f7', '#e57373']
+fig_bar, ax_bar = plt.subplots(figsize=(7, 1.5))
+comps = ['Gravel', 'Sand', 'Silt', 'Clay']
+vals = [gravel, sand, silt, clay]
+clrs = ['#8d6e63', '#d4e157', '#4fc3f7', '#e57373']
     
-    left = 0
-    for c, v, color in zip(comps, vals, clrs):
-        if v > 0:
-            ax_bar.barh('Soil Composition', v, left=left, color=color, label=f"{c}: {v:.1f}%")
-            if v >= 7.0:
-                ax_bar.text(left + v/2, 0, f"{v:.1f}%", ha='center', va='center', color='white', fontweight='bold', fontsize=8)
-            left += v
+left = 0
+for c, v, color in zip(comps, vals, clrs):
+    if v > 0:
+        ax_bar.barh('Soil Composition', v, left=left, color=color, label=f"{c}: {v:.1f}%")
+        if v >= 7.0:
+            ax_bar.text(left + v/2, 0, f"{v:.1f}%", ha='center', va='center', color='white', fontweight='bold', fontsize=8)
+        left += v
             
-    ax_bar.set_xlim(0, 100)
-    ax_bar.axis('off')
-    ax_bar.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=4, frameon=False, fontsize=8)
-    plt.tight_layout()
-    st.pyplot(fig_bar)
-
+ax_bar.set_xlim(0, 100)
+ax_bar.axis('off')
+ax_bar.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=4, frameon=False, fontsize=8)
+plt.tight_layout()
+st.pyplot(fig_bar)
 
 # ----------------------------------------------------
 # 3. ISOLATED FOOTING PAGE
