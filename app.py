@@ -56,7 +56,7 @@ if selected == "Home":
     """)
 
 # ----------------------------------------------------
-# SOIL CLASSIFICATION PAGE (DYNAMIC STANDARD-BASED GRAIN FRACTIONS)
+# SOIL CLASSIFICATION PAGE
 # ----------------------------------------------------
 if selected == "Soil Classification":
     st.title("🧪 Multi-Standard Soil Classification Suite")
@@ -98,13 +98,13 @@ if selected == "Soil Classification":
                 p100 = st.number_input("Sieve #100 (0.15 mm) - % Passing", 0.0, 100.0, 96.0, step=0.1)
                 p200 = st.number_input("Sieve #200 / 0.063mm - % Passing", 0.0, 100.0, 95.0, step=0.1)
                 
-                # Dynamic fractions calculation according to selected standard
+                # Boundary check based on standard
                 if "AASHTO" in system or "BS 5930" in system:
-                    # Gravel > 2.0 mm (#10 Sieve boundary)
+                    # Gravel > 2.0 mm (#10 Sieve)
                     gravel = max(0.0, 100.0 - p10)
                     sand = max(0.0, p10 - p200)
-                else: # USCS, IS 1498
-                    # Gravel > 4.75 mm (#4 Sieve boundary)
+                else: 
+                    # Gravel > 4.75 mm (#4 Sieve) for USCS / IS 1498
                     gravel = max(0.0, 100.0 - p4)
                     sand = max(0.0, p4 - p200)
                     
@@ -122,12 +122,12 @@ if selected == "Soil Classification":
                 auto_pan = max(0.0, 100.0 - accumulated_retained)
                 r_pan = st.number_input("Pan - % Retained (Auto-filled)", 0.0, 100.0, auto_pan, step=0.1)
                 
+                # Corrected % Retained logic according to selected standard
                 if "AASHTO" in system or "BS 5930" in system:
-                    gravel = r38 + r4
-                    sand = r10 + r20 + r40 + r100 + r200
+                    gravel = r38 + r4 + r10  # > 2.0mm
+                    sand = r20 + r40 + r100 + r200
                 else:
-                    gravel = r38 + r4 + r10  # Note: r10 included in sand for USCS
-                    gravel = r38 + r4
+                    gravel = r38 + r4  # > 4.75mm
                     sand = r10 + r20 + r40 + r100 + r200
                     
                 fines_total = r_pan
@@ -136,7 +136,7 @@ if selected == "Soil Classification":
             silt = fines_total * (silt_ratio / 100.0)
             clay = fines_total * (1.0 - (silt_ratio / 100.0))
 
-        # Check total percentage
+        # Percentage sum validation
         if input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
             total_percent = gravel + sand + silt + clay
             if abs(total_percent - 100.0) > 0.05:
@@ -150,7 +150,7 @@ if selected == "Soil Classification":
                 sand = (sand / total_sieve_sum) * 100.0
                 silt = (fines_total * (silt_ratio / 100.0) / total_sieve_sum) * 100.0
                 clay = (fines_total * (1.0 - (silt_ratio / 100.0)) / total_sieve_sum) * 100.0
-            st.success(f"✅ Fines: `{fines_total:.1f}%` | Active Standard Bound Applied (`{system.split()[0]}`)")
+            st.success(f"✅ Fines: `{fines_total:.1f}%` | Active Standard Boundaries Applied (`{system.split()[0]}`)")
 
         st.header("3. Atterberg Limits (%)")
         
@@ -274,8 +274,9 @@ if selected == "Soil Classification":
             "IS 1498 (Indian Standard)": is_res
         })
         
+        # Cleaned up Stacked Bar Chart Display
         st.subheader("🧱 Soil Composition Breakdown")
-        fig_bar, ax_bar = plt.subplots(figsize=(6, 1.2))
+        fig_bar, ax_bar = plt.subplots(figsize=(7, 2.0))
         components = ['Gravel', 'Sand', 'Silt', 'Clay']
         values = [gravel, sand, silt, clay]
         colors_list = ['#8d6e63', '#d4e157', '#4fc3f7', '#e57373']
@@ -284,11 +285,15 @@ if selected == "Soil Classification":
         for comp, val, col in zip(components, values, colors_list):
             if val > 0:
                 ax_bar.barh('Composition', val, left=left, color=col, label=f"{comp}: {val:.1f}%")
+                # Add text label inside bar if width > 8%
+                if val >= 8.0:
+                    ax_bar.text(left + val/2, 0, f"{val:.1f}%", ha='center', va='center', color='white', fontweight='bold', fontsize=9)
                 left += val
                 
         ax_bar.set_xlim(0, 100)
         ax_bar.axis('off')
-        ax_bar.legend(loc='lower center', bbox_to_anchor=(0.5, -0.8), ncol=4, frameon=False)
+        ax_bar.legend(loc='upper center', bbox_to_anchor=(0.5, -0.3), ncol=4, frameon=False, fontsize=9)
+        plt.tight_layout()
         st.pyplot(fig_bar)
 
         st.subheader("📈 Casagrande Plasticity Chart")
@@ -307,6 +312,7 @@ if selected == "Soil Classification":
         ax.set_ylabel("Plasticity Index (PI %)")
         ax.grid(True, linestyle=':', alpha=0.6)
         ax.legend(loc="upper left")
+        plt.tight_layout()
         
         st.pyplot(fig)
 # ----------------------------------------------------
