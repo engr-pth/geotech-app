@@ -3,6 +3,16 @@ import matplotlib.patches as patches
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.platypus import (
+    Image as RLImage,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+)
 
 # --- Page Config ---
 st.set_page_config(
@@ -86,7 +96,7 @@ with col_in:
         main_rebar_opts = {"12 mm": {"dia": 12.0, "area": 113.1}, "16 mm": {"dia": 16.0, "area": 201.1}, "20 mm": {"dia": 20.0, "area": 314.2}}
         temp_rebar_opts = {"10 mm": {"dia": 10.0, "area": 78.5}, "12 mm": {"dia": 12.0, "area": 113.1}}
     else:
-        main_rebar_opts = {"#4 (0.500 in)": {"dia": 0.500, "area": 0.20}, "#5 (0.625 in)": {"dia": 0.625, "area": 0.31}, "#6 (0.750 in)": {"dia": 0.750, "area": 0.44}}
+        main_rebar_opts = {"#4 (0.500 in)": {"dia": 0.500, "area": 0.20}, "#5 (0.625 in)": {"dia": 0.31}, "#6 (0.750 in)": {"dia": 0.44}}
         temp_rebar_opts = {"#3 (0.375 in)": {"dia": 0.375, "area": 0.11}, "#4 (0.500 in)": {"dia": 0.500, "area": 0.20}}
 
     col_r1, col_r2 = st.columns(2)
@@ -163,16 +173,30 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         b_mm, d_mm_val = 1000.0, d_eff * 1000.0
         Mu_Nmm = Mu * 1e6 * (9.81 if is_ton else 1.0)
         Rn = Mu_Nmm / (0.9 * b_mm * (d_mm_val**2))
-        rho = (0.85 * fc / fy) * (1.0 - np.sqrt(max(0.0, 1.0 - (2.0 * Rn) / (0.85 * fc))))
-        As_main_req = max(rho, 0.0018) * b_mm * d_mm_val
+        rho_calc = (0.85 * fc / fy) * (1.0 - np.sqrt(max(0.0, 1.0 - (2.0 * Rn) / (0.85 * fc))))
+        
+        # Minimum Steel Ratio Control (Updated with Beam Min Logic)
+        rho_slab_min = 0.0018
+        rho_beam_min = max((0.25 * np.sqrt(fc)) / fy, 1.4 / fy)
+        rho_min = max(rho_slab_min, rho_beam_min)
+        
+        rho_req = max(rho_calc, rho_min)
+        As_main_req = rho_req * b_mm * d_mm_val
         As_temp_req = 0.0018 * b_mm * (h_foot * 1000.0)
         spacing_unit = "mm"
     else:
         b_in, d_in_val = 12.0, d_eff * 12.0
         Mu_inlbs = Mu * 12000.0 * (2.0 if is_ton else 1.0)
         Rn = Mu_inlbs / (0.9 * b_in * (d_in_val**2))
-        rho = (0.85 * fc / fy) * (1.0 - np.sqrt(max(0.0, 1.0 - (2.0 * Rn) / (0.85 * fc))))
-        As_main_req = max(rho, 0.0018) * b_in * d_in_val
+        rho_calc = (0.85 * fc / fy) * (1.0 - np.sqrt(max(0.0, 1.0 - (2.0 * Rn) / (0.85 * fc))))
+        
+        # Minimum Steel Ratio Control (Imperial)
+        rho_slab_min = 0.0018
+        rho_beam_min = max((3.0 * np.sqrt(fc)) / fy, 200.0 / fy)
+        rho_min = max(rho_slab_min, rho_beam_min)
+        
+        rho_req = max(rho_calc, rho_min)
+        As_main_req = rho_req * b_in * d_in_val
         As_temp_req = 0.0018 * b_in * (h_foot * 12.0)
         spacing_unit = "in"
 
@@ -182,7 +206,7 @@ if calc_trigger or "wall_calc_state" in st.session_state:
     s_main_final = int(min(s_main, min(3 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)))
     s_temp_final = int(min(s_temp, min(5 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)))
 
-    # Drawing with Correct 180 degree hook
+    # Drawing Function
     def draw_footing_section():
         fig, ax = plt.subplots(figsize=(7, 4.5))
         f_top, f_bottom = -Df, -Df - h_foot
@@ -200,7 +224,6 @@ if calc_trigger or "wall_calc_state" in st.session_state:
             ax.plot([left_x, left_x], [main_y, main_y + hook_len], color="red", linewidth=2.5)
             ax.plot([right_x, right_x], [main_y, main_y + hook_len], color="red", linewidth=2.5)
         elif "180-Degree" in hook_type:
-            # Corrected Vertical Return
             ax.plot([left_x, left_x], [main_y, main_y + hook_len], color="red", linewidth=2.5)
             ax.plot([left_x, left_x + 0.03], [main_y + hook_len, main_y + hook_len], color="red", linewidth=2.5)
             ax.plot([left_x + 0.03, left_x + 0.03], [main_y + hook_len, main_y + 0.03], color="red", linewidth=2.5)
@@ -225,7 +248,68 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         plt.close()
         return buf
 
+    # PDF Report Generator
+    def generate_pdf_report(sec_buf):
+        pdf_buf = io.BytesIO()
+        doc = SimpleDocTemplate(
+            pdf_buf, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36
+        )
+        styles = getSampleStyleSheet()
+
+        main_title_style = ParagraphStyle(
+            'MainTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=16, leading=20, textColor=colors.HexColor("#1A365D"), spaceAfter=8
+        )
+        sub_title_style = ParagraphStyle(
+            'SubTitle', parent=styles['Normal'], fontName='Helvetica', fontSize=9, leading=13, textColor=colors.HexColor("#2D3748"), spaceAfter=12
+        )
+        h1_sec_style = ParagraphStyle(
+            'H1Sec', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=12, leading=16, textColor=colors.HexColor("#000000"), spaceBefore=10, spaceAfter=6
+        )
+        bullet_style = ParagraphStyle(
+            'BulletText', parent=styles['Normal'], fontName='Helvetica', fontSize=9, leading=13, textColor=colors.HexColor("#1A202C")
+        )
+        math_code_style = ParagraphStyle(
+            'MathCode', parent=styles['Normal'], fontName='Courier', fontSize=8.5, leading=12, textColor=colors.HexColor("#4A5568")
+        )
+
+        story = []
+
+        story.append(Paragraph("CONTINUOUS WALL FOOTING DESIGN CALCULATION REPORT", main_title_style))
+        story.append(Paragraph(
+            f"Code Standard: <b>{aci_version}</b> | Unit System: <b>{unit_system}</b> | Hook Type: <b>{hook_type}</b>",
+            sub_title_style
+        ))
+
+        story.append(Paragraph("1. Loadings & Geometry", h1_sec_style))
+        story.append(Paragraph(f"• Dead Load = {P_dl:.2f} {u_force_per_len} | Live Load = {P_ll:.2f} {u_force_per_len} | Pu = {Pu:.2f} {u_force_per_len}", bullet_style))
+        story.append(Paragraph(f"• Footing Width (B) = {B:.2f} {u_len} | Thickness (h) = {h_foot:.2f} {u_len} | Wall Thickness = {b_wall:.2f} {u_len}", bullet_style))
+
+        story.append(Paragraph("2. Geotechnical Verification", h1_sec_style))
+        story.append(Paragraph(f"• Allowable Soil Capacity (q_allow) = {q_allow:.2f} {u_stress}", bullet_style))
+        story.append(Paragraph(f"• Service Soil Pressure = {q_service_actual:.2f} {u_stress} [{'PASS' if q_service_actual <= q_net_allow else 'FAIL'}]", bullet_style))
+
+        story.append(Paragraph("3. Shear & Structural Verification", h1_sec_style))
+        math_shear = (
+            f"V<sub>u,oneway</sub> = {Vu_oneway:.2f} {u_force_per_len}<br/>"
+            f"φV<sub>c</sub> = {Phi_Vc:.2f} {u_force_per_len} [{'PASS' if Phi_Vc >= Vu_oneway else 'FAIL'}]"
+        )
+        story.append(Paragraph(math_shear, math_code_style))
+
+        story.append(Paragraph("4. Reinforcement Details", h1_sec_style))
+        story.append(Paragraph(f"• Main Transverse Rebar: <b>{selected_main_bar} @ {s_main_final} {spacing_unit} c/c</b>", bullet_style))
+        story.append(Paragraph(f"• Longitudinal Temp Rebar: <b>{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c</b>", bullet_style))
+
+        story.append(Spacer(1, 10))
+        story.append(Paragraph("5. Structural Cross-Section View", h1_sec_style))
+        img_sec = RLImage(sec_buf, width=320, height=200)
+        story.append(img_sec)
+
+        doc.build(story)
+        pdf_buf.seek(0)
+        return pdf_buf
+
     sec_img = draw_footing_section()
+    pdf_file = generate_pdf_report(sec_img)
 
     with col_res:
         st.header("📊 Continuous Footing Results")
@@ -242,3 +326,12 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         st.markdown(f"• **Temp Steel:** **{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c**")
 
         st.image(sec_img, caption="Cross-Section Diagram")
+
+        st.markdown("---")
+        st.download_button(
+            label="📄 Download Calculation PDF Report",
+            data=pdf_file,
+            file_name="Continuous_Wall_Footing_Report.pdf",
+            mime="application/pdf",
+            use_container_width=True
+        )
