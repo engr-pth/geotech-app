@@ -56,7 +56,7 @@ if selected == "Home":
     """)
 
 # ----------------------------------------------------
-# 2. SOIL CLASSIFICATION PAGE
+# 2. SOIL CLASSIFICATION PAGE (CORRECTED)
 # ----------------------------------------------------
 elif selected == "Soil Classification":
     st.title("🧪 Multi-Standard Soil Classification Suite")
@@ -68,7 +68,7 @@ elif selected == "Soil Classification":
         st.header("1. Grain Size Distribution Input Method")
         input_method = st.radio(
             "Select Input Type",
-            ["Direct Percentages (Gravel, Sand, Silt, Clay)", "Extended Sieve & Hydrometer Analysis"],
+            ["Direct Percentages (Gravel, Sand, Silt, Clay)", "Sieve Analysis (% Passing / Retained on Sieve #)"],
             key="soil_input_method"
         )
 
@@ -78,80 +78,63 @@ elif selected == "Soil Classification":
             silt = st.number_input("Silt (0.002mm - 0.075mm) %", 0.0, 100.0, 30.0, step=0.1)
             clay = st.number_input("Clay (< 0.002mm) %", 0.0, 100.0, 20.0, step=0.1)
         else:
-            st.markdown("### 🔍 Extended Sieve Analysis Data")
+            st.markdown("Enter Sieve Analysis Data (Standard ASTM Sieves)")
             sieve_basis = st.radio("Sieve Data Format", ["% Passing", "% Retained"], horizontal=True)
             
             if sieve_basis == "% Passing":
-                p3in  = st.number_input("3 inch (75 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
-                p15in = st.number_input("1.5 inch (37.5 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
-                p34in = st.number_input("3/4 inch (19 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
-                p38in = st.number_input("3/8 inch (9.5 mm) - % Passing", 0.0, 100.0, 95.0, step=0.1)
-                p4    = st.number_input("Sieve #4 (4.75 mm) - % Passing", 0.0, 100.0, 85.0, step=0.1)
-                p10   = st.number_input("Sieve #10 (2.0 mm) - % Passing", 0.0, 100.0, 72.0, step=0.1)
-                p20   = st.number_input("Sieve #20 (0.85 mm) - % Passing", 0.0, 100.0, 65.0, step=0.1)
-                p40   = st.number_input("Sieve #40 (0.425 mm) - % Passing", 0.0, 100.0, 58.0, step=0.1)
-                p60   = st.number_input("Sieve #60 (0.25 mm) - % Passing", 0.0, 100.0, 54.0, step=0.1)
-                p140  = st.number_input("Sieve #140 (0.106 mm) - % Passing", 0.0, 100.0, 52.0, step=0.1)
-                p200  = st.number_input("Sieve #200 (0.075 mm) - % Passing", 0.0, 100.0, 50.0, step=0.1)
+                p38 = st.number_input("3/8 inch (9.5 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
+                p4 = st.number_input("Sieve #4 (4.75 mm) - % Passing", 0.0, 100.0, 85.0, step=0.1)
+                p10 = st.number_input("Sieve #10 (2.0 mm) - % Passing", 0.0, 100.0, 70.0, step=0.1)
+                p40 = st.number_input("Sieve #40 (0.425 mm) - % Passing", 0.0, 100.0, 55.0, step=0.1)
+                p200 = st.number_input("Sieve #200 (0.075 mm) - % Passing", 0.0, 100.0, 50.0, step=0.1)
                 
+                # Corrected Composition Breakdown based on USCS definitions
                 gravel = max(0.0, 100.0 - p4)
                 sand = max(0.0, p4 - p200)
-                fines_total = p200
+                fines_total = max(0.0, p200)
             else:
-                r3in  = st.number_input("3 inch (75 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
-                r15in = st.number_input("1.5 inch (37.5 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
-                r34in = st.number_input("3/4 inch (19 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
-                r38in = st.number_input("3/8 inch (9.5 mm) - % Retained", 0.0, 100.0, 5.0, step=0.1)
-                r4    = st.number_input("Sieve #4 (4.75 mm) - % Retained", 0.0, 100.0, 10.0, step=0.1)
-                r10   = st.number_input("Sieve #10 (2.0 mm) - % Retained", 0.0, 100.0, 13.0, step=0.1)
-                r20   = st.number_input("Sieve #20 (0.85 mm) - % Retained", 0.0, 100.0, 7.0, step=0.1)
-                r40   = st.number_input("Sieve #40 (0.425 mm) - % Retained", 0.0, 100.0, 7.0, step=0.1)
-                r60   = st.number_input("Sieve #60 (0.25 mm) - % Retained", 0.0, 100.0, 4.0, step=0.1)
-                r140  = st.number_input("Sieve #140 (0.106 mm) - % Retained", 0.0, 100.0, 2.0, step=0.1)
-                r200  = st.number_input("Sieve #200 (0.075 mm) - % Retained", 0.0, 100.0, 2.0, step=0.1)
-                r_pan = st.number_input("Pan (Fines) - % Retained", 0.0, 100.0, 50.0, step=0.1)
+                r38 = st.number_input("3/8 inch (9.5 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
+                r4 = st.number_input("Sieve #4 (4.75 mm) - % Retained", 0.0, 100.0, 15.0, step=0.1)
+                r10 = st.number_input("Sieve #10 (2.0 mm) - % Retained", 0.0, 100.0, 15.0, step=0.1)
+                r40 = st.number_input("Sieve #40 (0.425 mm) - % Retained", 0.0, 100.0, 15.0, step=0.1)
+                r200 = st.number_input("Sieve #200 (0.075 mm) - % Retained", 0.0, 100.0, 5.0, step=0.1)
+                r_pan = st.number_input("Pan - % Retained", 0.0, 100.0, 50.0, step=0.1)
                 
-                gravel = r3in + r15in + r34in + r38in + r4
-                sand = r10 + r20 + r40 + r60 + r140 + r200
+                gravel = r38 + r4
+                sand = r10 + r40 + r200
                 fines_total = r_pan
 
-            st.markdown("### 🧪 Hydrometer Analysis (Fines Breakdown)")
-            hydro_mode = st.radio("Hydrometer Input Mode", ["Slider Ratio", "Direct Silt & Clay %"], horizontal=True)
-            
-            if hydro_mode == "Slider Ratio":
-                silt_ratio = st.slider("Silt Ratio of Fines (%)", 0.0, 100.0, 60.0, step=1.0)
-                silt = fines_total * (silt_ratio / 100.0)
-                clay = fines_total * (1.0 - (silt_ratio / 100.0))
-            else:
-                silt = st.number_input("Silt Percentage (%)", 0.0, 100.0, 30.0, step=0.1)
-                clay = st.number_input("Clay Percentage (%)", 0.0, 100.0, 20.0, step=0.1)
+            # Hydrometer split for fines (Silt vs Clay split)
+            silt_ratio = st.slider("Silt / Fines Ratio (%)", 0.0, 100.0, 60.0, step=1.0)
+            silt = fines_total * (silt_ratio / 100.0)
+            clay = fines_total * (1.0 - (silt_ratio / 100.0))
 
+        # Corrected Total Calculation (Gravel + Sand + Silt + Clay should sum up to 100%)
         fines = silt + clay
         total_percent = gravel + sand + silt + clay
         
-        if abs(total_percent - 100.0) > 0.05 and input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
-            st.error(f"⚠️ **Total Percentage Error:** {total_percent:.1f}% (Must equal 100%)")
+        # Normalize if using Sieve Analysis to strictly match 100% for display breakdown if needed, 
+        # or validate direct percentages.
+        if input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
+            if abs(total_percent - 100.0) > 0.05:
+                st.error(f"⚠️ **Total Percentage Error:** {total_percent:.1f}% (Must equal 100%)")
+            else:
+                st.success(f"✅ Total Percentage: `{total_percent:.1f}%` | **Fines (< 0.075mm):** `{fines:.1f}%`")
         else:
-            st.success(f"✅ Total: `{total_percent:.1f}%` | **Gravel:** `{gravel:.1f}%` | **Sand:** `{sand:.1f}%` | **Fines:** `{fines:.1f}%`")
+            # For Sieve Analysis, normalize components so breakdown equals 100%
+            if total_percent > 0:
+                gravel = (gravel / total_percent) * 100.0
+                sand = (sand / total_percent) * 100.0
+                silt = (silt / total_percent) * 100.0
+                clay = (clay / total_percent) * 100.0
+            total_percent = gravel + sand + silt + clay
+            st.success(f"✅ Normalized Total Percentage: `{total_percent:.1f}%` | **Fines (< 0.075mm):** `{fines:.1f}%`")
         
-        st.header("2. Atterberg Limits (%) - Smart Input")
-        calc_mode = st.selectbox("Choose 2 Known Parameters to Calculate the 3rd", ["Calculate PI from LL & PL", "Calculate PL from LL & PI", "Calculate LL from PL & PI"])
-        
-        if calc_mode == "Calculate PI from LL & PL":
-            LL = st.number_input("Liquid Limit (LL)", 0.0, 150.0, 45.0, step=0.1)
-            PL = st.number_input("Plastic Limit (PL)", 0.0, 100.0, 20.0, step=0.1)
-            PI = max(0.0, LL - PL)
-            st.info(f"✨ **Calculated Plasticity Index (PI):** `{PI:.1f}%`")
-        elif calc_mode == "Calculate PL from LL & PI":
-            LL = st.number_input("Liquid Limit (LL)", 0.0, 150.0, 45.0, step=0.1)
-            PI = st.number_input("Plasticity Index (PI)", 0.0, 100.0, 25.0, step=0.1)
-            PL = max(0.0, LL - PI)
-            st.info(f"✨ **Calculated Plastic Limit (PL):** `{PL:.1f}%`")
-        else:
-            PL = st.number_input("Plastic Limit (PL)", 0.0, 100.0, 20.0, step=0.1)
-            PI = st.number_input("Plasticity Index (PI)", 0.0, 100.0, 25.0, step=0.1)
-            LL = PL + PI
-            st.info(f"✨ **Calculated Liquid Limit (LL):** `{LL:.1f}%`")
+        st.header("2. Atterberg Limits (%)")
+        LL = st.number_input("Liquid Limit (LL)", 0.0, 150.0, 45.0, step=0.1)
+        PL = st.number_input("Plastic Limit (PL)", 0.0, 100.0, 20.0, step=0.1)
+        PI = max(0.0, LL - PL)
+        st.info(f"**Plasticity Index (PI):** `{PI:.1f}%`")
         
         st.header("3. Grain Size Parameters (Optional)")
         Cu = st.number_input("Uniformity Coefficient (Cu)", 0.0, 50.0, 4.0, step=0.1)
