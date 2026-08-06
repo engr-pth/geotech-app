@@ -93,7 +93,6 @@ with col_in:
 
     rebar_system = st.radio("Rebar Size Standard", ["Metric Sizes (mm)", "Imperial Sizes (# / in)"])
     if "Metric" in rebar_system:
-        # Full set of metric sizes as requested: 16, 18, 20, 22, 25 mm
         main_rebar_opts = {
             "16 mm": {"dia": 16.0, "area": 201.1},
             "18 mm": {"dia": 18.0, "area": 254.5},
@@ -126,7 +125,7 @@ with col_in:
 
     col_r1, col_r2 = st.columns(2)
     selected_main_bar = col_r1.selectbox("Main Rebar (Transverse)", list(main_rebar_opts.keys()))
-    selected_temp_bar = col_r2.selectbox("Distribution Steel (Longitudinal)", list(temp_rebar_opts.keys()))
+    selected_temp_bar = col_r2.selectbox("Temperature & Shrinkage Rebar", list(temp_rebar_opts.keys()))
 
     hook_type = st.radio("Main Rebar End Hook Type", ["None (Straight Bar)", "90-Degree Standard Hook", "180-Degree Standard Hook"])
 
@@ -200,12 +199,10 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         Rn = Mu_Nmm / (0.9 * b_mm * (d_mm_val**2))
         rho_calc = (0.85 * fc / fy) * (1.0 - np.sqrt(max(0.0, 1.0 - (2.0 * Rn) / (0.85 * fc))))
         
-        # Minimum Steel Ratio Control
-        rho_slab_min = 0.0018
-        rho_beam_min = max((0.25 * np.sqrt(fc)) / fy, 1.4 / fy)
-        rho_min = max(rho_slab_min, rho_beam_min)
-        
+        # Temperature and Shrinkage Steel Ratio Only (0.0018)
+        rho_min = 0.0018
         rho_req = max(rho_calc, rho_min)
+        
         As_main_req = rho_req * b_mm * d_mm_val
         As_temp_req = 0.0018 * b_mm * (h_foot * 1000.0)
         spacing_unit = "mm"
@@ -215,12 +212,10 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         Rn = Mu_inlbs / (0.9 * b_in * (d_in_val**2))
         rho_calc = (0.85 * fc / fy) * (1.0 - np.sqrt(max(0.0, 1.0 - (2.0 * Rn) / (0.85 * fc))))
         
-        # Minimum Steel Ratio Control (Imperial)
-        rho_slab_min = 0.0018
-        rho_beam_min = max((3.0 * np.sqrt(fc)) / fy, 200.0 / fy)
-        rho_min = max(rho_slab_min, rho_beam_min)
-        
+        # Temperature and Shrinkage Steel Ratio Only (0.0018)
+        rho_min = 0.0018
         rho_req = max(rho_calc, rho_min)
+        
         As_main_req = rho_req * b_in * d_in_val
         As_temp_req = 0.0018 * b_in * (h_foot * 12.0)
         spacing_unit = "in"
@@ -231,12 +226,11 @@ if calc_trigger or "wall_calc_state" in st.session_state:
     s_main_final = int(min(s_main, min(3 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)))
     s_temp_final = int(min(s_temp, min(5 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)))
 
-    # --- Structural Section Drawing Function (with Legend & Corrected 180 Hook) ---
+    # --- Corrected 180-degree Hook Elevation Section ---
     def draw_footing_section():
         fig, ax = plt.subplots(figsize=(7, 4.5))
         f_top, f_bottom = -Df, -Df - h_foot
 
-        # Soil & Concrete Graphics
         ax.fill_between([-B / 2 - 1.0, B / 2 + 1.0], [0, 0], [f_bottom - 0.4, f_bottom - 0.4], color="#E5D3B3", alpha=0.5)
         ax.plot([-B / 2 - 1.0, B / 2 + 1.0], [0, 0], "k--", linewidth=1, label="Ground Level (GL)")
         
@@ -252,35 +246,35 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         # Main Rebar Line
         ax.plot([left_x, right_x], [main_y, main_y], color="red", linewidth=2.5, label=f"Main Bar: {selected_main_bar}")
 
-        hook_len = 0.12 if not is_imperial else 0.4
-        hook_gap = 0.03 if not is_imperial else 0.1
+        hook_h = 0.12 if not is_imperial else 0.4
+        hook_r = 0.03 if not is_imperial else 0.1
         
-        # Hook Rendering
         if "90-Degree" in hook_type:
-            ax.plot([left_x, left_x], [main_y, main_y + hook_len], color="red", linewidth=2.5)
-            ax.plot([right_x, right_x], [main_y, main_y + hook_len], color="red", linewidth=2.5)
+            ax.plot([left_x, left_x], [main_y, main_y + hook_h], color="red", linewidth=2.5)
+            ax.plot([right_x, right_x], [main_y, main_y + hook_h], color="red", linewidth=2.5)
         elif "180-Degree" in hook_type:
-            # Corrected 180 degree hook geometry (loops back over itself)
-            # Left hook
-            ax.plot([left_x, left_x], [main_y, main_y + hook_len], color="red", linewidth=2.5)
-            ax.plot([left_x, left_x + hook_gap], [main_y + hook_len, main_y + hook_len], color="red", linewidth=2.5)
-            ax.plot([left_x + hook_gap, left_x + hook_gap], [main_y + hook_len, main_y], color="red", linewidth=2.5)
-            
-            # Right hook
-            ax.plot([right_x, right_x], [main_y, main_y + hook_len], color="red", linewidth=2.5)
-            ax.plot([right_x, right_x - hook_gap], [main_y + hook_len, main_y + hook_len], color="red", linewidth=2.5)
-            ax.plot([right_x - hook_gap, right_x - hook_gap], [main_y + hook_len, main_y], color="red", linewidth=2.5)
+            # Corrected Standard 180-degree Hook Geometry (Loops upwards and back inward)
+            # Left 180 Hook
+            ax.plot([left_x, left_x], [main_y, main_y + hook_h], color="red", linewidth=2.5)
+            ax.plot([left_x, left_x + hook_r], [main_y + hook_h, main_y + hook_h + hook_r], color="red", linewidth=2.5)
+            ax.plot([left_x + hook_r, left_x + 2 * hook_r], [main_y + hook_h + hook_r, main_y + hook_h], color="red", linewidth=2.5)
+            ax.plot([left_x + 2 * hook_r, left_x + 2 * hook_r], [main_y + hook_h, main_y + 0.02], color="red", linewidth=2.5)
+
+            # Right 180 Hook
+            ax.plot([right_x, right_x], [main_y, main_y + hook_h], color="red", linewidth=2.5)
+            ax.plot([right_x, right_x - hook_r], [main_y + hook_h, main_y + hook_h + hook_r], color="red", linewidth=2.5)
+            ax.plot([right_x - hook_r, right_x - 2 * hook_r], [main_y + hook_h + hook_r, main_y + hook_h], color="red", linewidth=2.5)
+            ax.plot([right_x - 2 * hook_r, right_x - 2 * hook_r], [main_y + hook_h, main_y + 0.02], color="red", linewidth=2.5)
 
         # Distribution Steel Dots
         dot_x_coords = np.linspace(left_x + 0.1, right_x - 0.1, 7)
-        ax.scatter(dot_x_coords, [main_y + 0.03] * 7, color="darkblue", s=30, zorder=5, label=f"Dist. Bar: {selected_temp_bar}")
+        ax.scatter(dot_x_coords, [main_y + 0.03] * 7, color="darkblue", s=30, zorder=5, label=f"Temp/Shrinkage Bar: {selected_temp_bar}")
 
         ax.set_xlim(-B / 2 - 0.8, B / 2 + 0.8)
         ax.set_ylim(f_bottom - 0.6, 0.5)
         ax.set_aspect("equal")
         ax.axis("off")
         
-        # Add Legend to Elevation
         ax.legend(loc="upper right", fontsize=7, framealpha=0.9)
         plt.title(f"Footing Elevation Section ({hook_type})", fontsize=10, fontweight="bold")
         plt.tight_layout()
@@ -291,24 +285,21 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         plt.close()
         return buf
 
-    # --- Structural Plan Drawing Function (New Feature) ---
+    # --- Footing Top Plan Drawing Function ---
     def draw_footing_plan():
         fig, ax = plt.subplots(figsize=(6, 4.5))
-        unit_len_display = 2.0 if not is_imperial else 6.0  # Unit strip length shown in plan
+        unit_len_display = 2.0 if not is_imperial else 6.0
         
-        # Footing & Wall Contours in Plan
         foot_plan = patches.Rectangle((-B / 2, -unit_len_display / 2), B, unit_len_display, facecolor="#E5E7EB", edgecolor="#1F2937", linewidth=2, label="Footing Plan")
         wall_plan = patches.Rectangle((-b_wall / 2, -unit_len_display / 2), b_wall, unit_len_display, facecolor="#4B5563", edgecolor="black", linewidth=1.5, label="Wall Above")
         
         ax.add_patch(foot_plan)
         ax.add_patch(wall_plan)
 
-        # Draw Main Steel Mesh Lines (Transverse)
         y_lines = np.linspace(-unit_len_display / 2 + 0.1, unit_len_display / 2 - 0.1, 8)
         for idx, y_pos in enumerate(y_lines):
             ax.plot([-B / 2 + cover, B / 2 - cover], [y_pos, y_pos], color="red", linewidth=1.5, label="Transverse Rebar" if idx == 0 else "")
 
-        # Draw Distribution Steel Mesh Lines (Longitudinal)
         x_lines = np.linspace(-B / 2 + cover + 0.05, B / 2 - cover - 0.05, 7)
         for idx, x_pos in enumerate(x_lines):
             ax.plot([x_pos, x_pos], [-unit_len_display / 2 + 0.05, unit_len_display / 2 - 0.05], color="darkblue", linestyle="--", linewidth=1.2, label="Longitudinal Rebar" if idx == 0 else "")
@@ -328,7 +319,7 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         plt.close()
         return buf
 
-    # --- Comprehensive PDF Report Generator ---
+    # --- PDF Report Generator ---
     def generate_pdf_report(sec_buf, plan_buf):
         pdf_buf = io.BytesIO()
         doc = SimpleDocTemplate(
@@ -360,13 +351,11 @@ if calc_trigger or "wall_calc_state" in st.session_state:
             sub_title_style
         ))
 
-        # 1. Loadings & Geometry
         story.append(Paragraph("1. Applied Loads & Geometric Parameters", h1_sec_style))
         story.append(Paragraph(f"• Dead Load (P_DL) = {P_dl:.2f} {u_force_per_len} | Live Load (P_LL) = {P_ll:.2f} {u_force_per_len}", bullet_style))
         story.append(Paragraph(f"• Factored Line Load Pu = 1.2({P_dl:.2f}) + 1.6({P_ll:.2f}) = <b>{Pu:.2f} {u_force_per_len}</b>", bullet_style))
         story.append(Paragraph(f"• Footing Width (B) = {B:.2f} {u_len} | Thickness (h) = {h_foot:.2f} {u_len} | Wall Width (b_w) = {b_wall:.2f} {u_len}", bullet_style))
 
-        # 2. Geotechnical Verification
         story.append(Paragraph("2. Geotechnical Bearing Capacity Checks", h1_sec_style))
         story.append(Paragraph(f"• Soil Surcharge Pressure (q_surcharge) = {surcharge:.2f} {u_stress}", bullet_style))
         story.append(Paragraph(f"• Net Allowable Bearing Capacity (q_net_allow) = {q_net_allow:.2f} {u_stress}", bullet_style))
@@ -374,7 +363,6 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         status_geo = "SAFE" if q_service_actual <= q_net_allow else "OVERLOADED"
         story.append(Paragraph(f"• Geotechnical Bearing Status: <b>[{status_geo}]</b>", bullet_style))
 
-        # 3. Structural Shear Checks
         story.append(Paragraph("3. One-Way Shear Verification (ACI 318)", h1_sec_style))
         math_shear = (
             f"Factored Pressure qu = Pu / B = {qu_factored:.2f} {u_stress}<br/>"
@@ -386,26 +374,23 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         status_shear = "PASS" if Phi_Vc >= Vu_oneway else "FAIL"
         story.append(Paragraph(f"• One-Way Shear Status: <b>[{status_shear}]</b>", bullet_style))
 
-        # 4. Flexural Design Details
         story.append(Paragraph("4. Flexural Reinforcement Derivations", h1_sec_style))
         math_flex = (
             f"Factored Moment Mu = (qu * Cantilever^2) / 2 = {Mu:.2f} {u_force_per_len}*{u_len}<br/>"
             f"Calculated Steel Ratio ρ_calc = {rho_calc:.6f}<br/>"
-            f"Minimum Steel Ratio ρ_min = max(ρ_slab, ρ_beam) = {rho_min:.6f}<br/>"
-            f"Governing Steel Ratio ρ_req = {rho_req:.6f}"
+            f"Minimum Temperature & Shrinkage Ratio ρ_min = {rho_min:.6f}<br/>"
+            f"Governing Steel Ratio ρ_req = max(ρ_calc, ρ_min) = {rho_req:.6f}"
         )
         story.append(Paragraph(math_flex, math_code_style))
         story.append(Paragraph(f"• Main Transverse Rebar: <b>{selected_main_bar} @ {s_main_final} {spacing_unit} c/c</b> ({hook_type})", bullet_style))
-        story.append(Paragraph(f"• Longitudinal Distribution Rebar: <b>{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c</b>", bullet_style))
+        story.append(Paragraph(f"• Temperature & Shrinkage Rebar: <b>{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c</b>", bullet_style))
 
-        # 5. Structural Detailing Drawings (Elevation & Plan)
         story.append(Spacer(1, 6))
         story.append(Paragraph("5. Structural Detailing Drawings", h1_sec_style))
         
         img_sec = RLImage(sec_buf, width=250, height=160)
         img_plan = RLImage(plan_buf, width=250, height=160)
         
-        # Display figures side by side in table
         img_table = Table([[img_sec, img_plan]], colWidths=[260, 260])
         img_table.setStyle([
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
@@ -434,7 +419,7 @@ if calc_trigger or "wall_calc_state" in st.session_state:
 
         st.subheader("3. Reinforcement Arrangement")
         st.markdown(f"• **Main Steel:** **{selected_main_bar} @ {s_main_final} {spacing_unit} c/c** ({hook_type})")
-        st.markdown(f"• **Temp Steel:** **{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c**")
+        st.markdown(f"• **Temp/Shrinkage Steel:** **{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c**")
 
         st.subheader("4. Detailing & Structural Drawings")
         tab1, tab2 = st.tabs(["Elevation Section", "Top Plan View"])
