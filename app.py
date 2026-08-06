@@ -67,7 +67,7 @@ elif selected == "Soil Classification":
 
     col_in, col_res = st.columns([1, 1.2])
 
-    with col_in:
+with col_in:
     st.header("1. Grain Size Distribution Inputs")
     
     # Input Method Selection
@@ -80,12 +80,10 @@ elif selected == "Soil Classification":
         clay = st.number_input("Clay (< 0.002mm) %", 0.0, 100.0, 20.0, step=0.1)
     else:
         st.info("Sieve Analysis အရ အဓိက Sieve များနှင့် Hydrometer ရလဒ်များကို ထည့်ပါ။")
-        # 4.75mm sieve corresponds to Sieve No. 4 (Passing % gives Coarse/Fine split)
         passing_4_75 = st.number_input("% Passing Sieve 4.75 mm (No. 4)", 0.0, 100.0, 85.0, step=0.1)
         passing_0_075 = st.number_input("% Passing Sieve 0.075 mm (No. 200) [Fines]", 0.0, 100.0, 50.0, step=0.1)
         passing_0_002 = st.number_input("% Passing 0.002 mm (Clay fraction)", 0.0, 100.0, 20.0, step=0.1)
         
-        # Calculations from Sieve/Hydrometer data
         gravel = max(0.0, 100.0 - passing_4_75)
         sand = max(0.0, passing_4_75 - passing_0_075)
         silt = max(0.0, passing_0_075 - passing_0_002)
