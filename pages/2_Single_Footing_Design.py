@@ -347,28 +347,29 @@ if calc_trigger or "calculated" in st.session_state:
         if "90-Degree" in hook_type:
             ax.plot([left_x, left_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
             ax.plot([right_x, right_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
-        elif "180-Degree" in hook_type:
-            r_hook = 0.04 if not is_imperial else 0.12  # Radius for the 180-degree bend
-            tail_len = 0.05 if not is_imperial else 0.15 # Extension tail length
+       elif "180-Degree" in hook_type:
+            r_hook = 0.04 if not is_imperial else 0.12  # Radius of bend
+            tail_len = 0.05 if not is_imperial else 0.15 # Tail length
 
-            # --- Left Hook (U-turn bending UP and INWARDS) ---
-            # Center of arc is shifted left by r_hook so the bottom connects to left_x
-            arc_left = patches.Arc((left_x - r_hook, rebar_y_xdir + r_hook), 
-                                   2 * r_hook, 2 * r_hook, 
-                                   angle=0, theta1=180, theta2=360, color="red", linewidth=2.0)
-            ax.add_patch(arc_left)
-            # Horizontal tail connects exactly to the top of the arc
-            ax.plot([left_x - r_hook, left_x - r_hook + tail_len], 
+            # Angles for 180-degree bend turning UPWARDS and INWARDS
+            # Left hook turns from bottom (270 deg / -90 deg) to top (90 deg) via left (180 deg)
+            theta_left = np.linspace(1.5 * np.pi, 0.5 * np.pi, 30)
+            x_arc_left = (left_x) + r_hook * np.cos(theta_left)
+            y_arc_left = (rebar_y_xdir + r_hook) + r_hook * np.sin(theta_left)
+
+            # Draw Left Hook (Arc + Extension Tail)
+            ax.plot(x_arc_left, y_arc_left, color="red", linewidth=2.0)
+            ax.plot([left_x, left_x + tail_len], 
                     [rebar_y_xdir + 2 * r_hook, rebar_y_xdir + 2 * r_hook], color="red", linewidth=2.0)
 
-            # --- Right Hook (U-turn bending UP and INWARDS) ---
-            # Center of arc is shifted right by r_hook so the bottom connects to right_x
-            arc_right = patches.Arc((right_x + r_hook, rebar_y_xdir + r_hook), 
-                                    2 * r_hook, 2 * r_hook, 
-                                    angle=0, theta1=0, theta2=180, color="red", linewidth=2.0)
-            ax.add_patch(arc_right)
-            # Horizontal tail connects exactly to the top of the arc
-            ax.plot([right_x + r_hook, right_x + r_hook - tail_len], 
+            # Right hook turns from bottom (270 deg) to top (90 deg) via right (0 deg)
+            theta_right = np.linspace(-0.5 * np.pi, 0.5 * np.pi, 30)
+            x_arc_right = (right_x) + r_hook * np.cos(theta_right)
+            y_arc_right = (rebar_y_xdir + r_hook) + r_hook * np.sin(theta_right)
+
+            # Draw Right Hook (Arc + Extension Tail)
+            ax.plot(x_arc_right, y_arc_right, color="red", linewidth=2.0)
+            ax.plot([right_x, right_x - tail_len], 
                     [rebar_y_xdir + 2 * r_hook, rebar_y_xdir + 2 * r_hook], color="red", linewidth=2.0)
 
         x_coords = np.linspace(left_x, right_x, num_bars_x)
