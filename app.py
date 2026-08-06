@@ -12,6 +12,7 @@ st.markdown("""
 
 👈 **ဘေးဘက် Sidebar မီနူးမှ မိမိအသုံးပြုလိုသည့် Tool ကို ရွေးချယ်ပါ:**
 * **Soil Classification:** Grain size distribution နှင့် Atterberg limits များဖြင့် မြေအမျိုးအစားခွဲရန်
-* **Isolated Footing Design:** Shallow Foundation တစ်ခုဖြစ်သော Isolated Footing Design တွက်ချက်ရန်
-* **Continuous Wall Footing Design:** Shallow Foundation တစ်ခုဖြစ်သော Continuous Wall Footing Design တွက်ချက်ရန်
+* **Shallow Foundation Design တွက်ချက်ရန်
+    * **Isolated Footing Design:** Isolated Footing Design တွက်ချက်ရန်
+    * **Continuous Wall Footing Design:** Continuous Wall Footing Design တွက်ချက်ရန်
 """)
