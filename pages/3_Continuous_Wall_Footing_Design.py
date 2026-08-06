@@ -203,6 +203,10 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         rho_min = 0.0018
         rho_req = max(rho_calc, rho_min)
         
+        # Area in mm^2/m
+        main_bar_area = main_rebar_opts[selected_main_bar]["area"] if "Metric" in rebar_system else main_rebar_opts[selected_main_bar]["area"] * 645.16
+        temp_bar_area = temp_rebar_opts[selected_temp_bar]["area"] if "Metric" in rebar_system else temp_rebar_opts[selected_temp_bar]["area"] * 645.16
+
         As_main_req = rho_req * b_mm * d_mm_val
         As_temp_req = 0.0018 * b_mm * h_mm_val
         spacing_unit = "mm"
@@ -216,47 +220,48 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         rho_min = 0.0018
         rho_req = max(rho_calc, rho_min)
         
+        # Area in in^2/ft
+        main_bar_area = main_rebar_opts[selected_main_bar]["area"] if "Imperial" in rebar_system else main_rebar_opts[selected_main_bar]["area"] / 645.16
+        temp_bar_area = temp_rebar_opts[selected_temp_bar]["area"] if "Imperial" in rebar_system else temp_rebar_opts[selected_temp_bar]["area"] / 645.16
+
         As_main_req = rho_req * b_in * d_in_val
         As_temp_req = 0.0018 * b_in * h_in_val
         spacing_unit = "in"
 
-    s_main = (main_rebar_opts[selected_main_bar]["area"] / As_main_req) * (1000.0 if not is_imperial else 12.0)
-    s_temp = (temp_rebar_opts[selected_temp_bar]["area"] / As_temp_req) * (1000.0 if not is_imperial else 12.0)
+    s_main = (main_bar_area / As_main_req) * (1000.0 if not is_imperial else 12.0)
+    s_temp = (temp_bar_area / As_temp_req) * (1000.0 if not is_imperial else 12.0)
 
     max_s_temp = min(5 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)
 
     s_main_final = int(min(s_main, min(3 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)))
     s_temp_final = int(min(s_temp, max_s_temp))
 
-    # --- Development Length Check (ACI 318 Logic) ---
-    db = main_rebar_opts[selected_main_bar]["dia"]
-    # Available length from critical section (face of wall) to edge minus cover
+    # --- Corrected Development Length Check (Unit Conversion Handled) ---
+    raw_db = main_rebar_opts[selected_main_bar]["dia"]
+    
+    # Standardize db to match current unit_system
+    if is_imperial:
+        db_calc = raw_db if "Imperial" in rebar_system else (raw_db / 25.4)
+    else:
+        db_calc = raw_db if "Metric" in rebar_system else (raw_db * 25.4)
+
     L_avail_val = cantilever_arm - cover  # in footing units (m or ft)
 
     if not is_imperial:
-        # SI Calculation (db in mm, fc in MPa, fy in MPa, L_avail in mm)
-        L_avail_mm = L_avail_val * 1000.0
-        # Straight bar tension development length (ACI 318 simplified)
-        ld_straight = (fy / (1.1 * np.sqrt(fc))) * db
-        # Hooked bar tension development length (90 or 180 deg)
-        ld_hook = (0.24 * fy / np.sqrt(fc)) * db
-        
-        ld_req = ld_hook if "Hook" in hook_type else ld_straight
-        ld_status = L_avail_mm >= ld_req
+        # SI Calculation (db in mm, fc in MPa, fy in MPa)
+        L_avail_disp = L_avail_val * 1000.0
+        ld_straight = (fy / (1.1 * np.sqrt(fc))) * db_calc
+        ld_hook = (0.24 * fy / np.sqrt(fc)) * db_calc
         u_ld = "mm"
-        L_avail_disp = L_avail_mm
     else:
-        # FPS Calculation (db in inches, fc in psi, fy in psi, L_avail in inches)
-        L_avail_in = L_avail_val * 12.0
-        # Straight bar tension development length
-        ld_straight = (fy / (25.0 * np.sqrt(fc))) * db
-        # Hooked bar tension development length
-        ld_hook = (0.02 * fy / np.sqrt(fc)) * db
-        
-        ld_req = ld_hook if "Hook" in hook_type else ld_straight
-        ld_status = L_avail_in >= ld_req
+        # FPS Calculation (db in inches, fc in psi, fy in psi)
+        L_avail_disp = L_avail_val * 12.0
+        ld_straight = (fy / (25.0 * np.sqrt(fc))) * db_calc
+        ld_hook = (0.02 * fy / np.sqrt(fc)) * db_calc
         u_ld = "in"
-        L_avail_disp = L_avail_in
+
+    ld_req = ld_hook if "Hook" in hook_type else ld_straight
+    ld_status = L_avail_disp >= ld_req
 
     # --- Refined Hook Drawing Logic ---
     def draw_footing_section():
