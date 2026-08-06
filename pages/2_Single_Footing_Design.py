@@ -18,7 +18,7 @@ from reportlab.platypus import (
 st.set_page_config(
     page_title="Single Footing Design Suite", page_icon="🏗️", layout="wide"
 )
-st.title("🏗️ Single Geotechnical & Structural Footing Design Suite")
+st.title("🏗️ Single Footing Design (Geotechnical & Structural) Suite")
 
 col_in, col_res = st.columns([1.1, 1.1])
 
@@ -445,7 +445,7 @@ if calc_trigger or "calculated" in st.session_state:
         story = []
 
         # Header Title
-        story.append(Paragraph("STRUCTURAL & GEOTECHNICAL FOOTING DESIGN CALCULATION REPORT", main_title_style))
+        story.append(Paragraph("SINGLE-COLUMN FOOTING DESIGN: STRUCTURAL & GEOTECHNICAL CALCULATION REPORT", main_title_style))
         story.append(Paragraph(
             f"Code Standard: <b>{aci_version}</b> | Unit System: <b>{unit_system}</b> | Clear Cover: <b>3.0 in (75 mm)</b><br/>"
             f"Reinforcement Hook Type: <b>{hook_type}</b>",
@@ -477,10 +477,27 @@ if calc_trigger or "calculated" in st.session_state:
                 f"q<sub>max,service</sub> = P/A + 6M<sub>x</sub>/(BL²) + 6M<sub>y</sub>/(LB²) = {q_max_service:.2f} {u_stress} [{'PASS' if q_max_service <= q_allow else 'FAIL'}]"
             )
         elif "SPT" in geo_input_mode:
+            if is_imperial:
+                formula_str = "q<sub>allow</sub> = (N / 4.0) × (1.0 if ton else 2.0) × K<sub>d</sub>"
+                calc_str = f"q<sub>allow</sub> = ({target_layer['N']} / 4.0) × {'1.0' if is_ton else '2.0'} × {Kd:.2f} = {q_allow:.2f} {u_stress}"
+            else:
+                formula_str = "q<sub>allow</sub> = (N × 1.2 if ton else N / 0.05) × K<sub>d</sub>"
+                calc_str = f"q<sub>allow</sub> = ({target_layer['N']} × 1.2 if ton else {target_layer['N']} / 0.05) × {Kd:.2f} = {q_allow:.2f} {u_stress}"
+
             math_2b = (
-                f"N-value = {target_layer['N']}, K<sub>d</sub> = {Kd:.2f}<br/>"
-                f"q<sub>allow</sub> = {q_allow:.2f} {u_stress}<br/>"
-                f"q<sub>max,service</sub> = {q_max_service:.2f} {u_stress} [{'PASS' if q_max_service <= q_allow else 'FAIL'}]"
+                f"<b>SPT N-value Empirical Formulation (Meyerhof/Bowles):</b><br/>"
+                f"• Target Layer Standard Penetration Resistance N-value = <b>{target_layer['N']}</b><br/>"
+                f"• Effective Footing Width B' = B - 2e<sub>x</sub> = {B:.2f} - 2({e_x_total:.4f}) = {B_eff:.2f} {u_len}<br/>"
+                f"• Depth Correction Factor K<sub>d</sub> = min(1.33, 1 + 0.33 × (D<sub>f</sub> / B'))<br/>"
+                f"  K<sub>d</sub> = min(1.33, 1 + 0.33 × ({Df:.2f} / {B_eff:.2f})) = {Kd:.2f}<br/>"
+                f"• Allowable Bearing Capacity Formula:<br/>"
+                f"  {formula_str}<br/>"
+                f"  {calc_str}<br/>"
+                f"• Equivalent Ultimate Capacity q<sub>ult</sub> = q<sub>allow</sub> × FS = {q_allow:.2f} × {FS:.1f} = {q_ult:.2f} {u_stress}<br/>"
+                f"• Applied Service Soil Pressure Check:<br/>"
+                f"  q<sub>max,service</sub> = P/A + 6M<sub>x</sub>/(BL²) + 6M<sub>y</sub>/(LB²)<br/>"
+                f"  q<sub>max,service</sub> = {P_unfactored:.2f}/({B:.2f}×{L:.2f}) + 6({Mx_total:.2f})/({B:.2f}×{L:.2f}²) + 6({My_total:.2f})/({L:.2f}×{B:.2f}²)<br/>"
+                f"  q<sub>max,service</sub> = {q_max_service:.2f} {u_stress} [{'PASS' if q_max_service <= q_allow else 'FAIL'}]"
             )
         else:
             math_2b = (
