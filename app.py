@@ -56,7 +56,7 @@ if selected == "Home":
     """)
 
 # ----------------------------------------------------
-# 2. SOIL CLASSIFICATION PAGE
+# 2. SOIL CLASSIFICATION PAGE (UPDATED WITH PAN AUTO-FILL & EXTRA SIEVES)
 # ----------------------------------------------------
 elif selected == "Soil Classification":
     st.title("🧪 Multi-Standard Soil Classification Suite")
@@ -85,10 +85,11 @@ elif selected == "Soil Classification":
                 p38 = st.number_input("3/8 inch (9.5 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
                 p4 = st.number_input("Sieve #4 (4.75 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
                 p10 = st.number_input("Sieve #10 (2.0 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
+                p20 = st.number_input("Sieve #20 (0.85 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
                 p40 = st.number_input("Sieve #40 (0.425 mm) - % Passing", 0.0, 100.0, 98.0, step=0.1)
+                p100 = st.number_input("Sieve #100 (0.15 mm) - % Passing", 0.0, 100.0, 96.0, step=0.1)
                 p200 = st.number_input("Sieve #200 (0.075 mm) - % Passing", 0.0, 100.0, 95.0, step=0.1)
                 
-                # Corrected logic based on ASTM standards
                 gravel = max(0.0, 100.0 - p4)
                 sand = max(0.0, p4 - p200)
                 fines_total = max(0.0, p200)
@@ -96,12 +97,19 @@ elif selected == "Soil Classification":
                 r38 = st.number_input("3/8 inch (9.5 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
                 r4 = st.number_input("Sieve #4 (4.75 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
                 r10 = st.number_input("Sieve #10 (2.0 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
+                r20 = st.number_input("Sieve #20 (0.85 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
                 r40 = st.number_input("Sieve #40 (0.425 mm) - % Retained", 0.0, 100.0, 2.0, step=0.1)
-                r200 = st.number_input("Sieve #200 (0.075 mm) - % Retained", 0.0, 100.0, 3.0, step=0.1)
-                r_pan = st.number_input("Pan - % Retained", 0.0, 100.0, 95.0, step=0.1)
+                r100 = st.number_input("Sieve #100 (0.15 mm) - % Retained", 0.0, 100.0, 2.0, step=0.1)
+                r200 = st.number_input("Sieve #200 (0.075 mm) - % Retained", 0.0, 100.0, 1.0, step=0.1)
+                
+                # Auto-fill Pan calculation based on remaining percentage to reach 100%
+                accumulated_retained = r38 + r4 + r10 + r20 + r40 + r100 + r200
+                auto_pan = max(0.0, 100.0 - accumulated_retained)
+                
+                r_pan = st.number_input("Pan - % Retained (Auto-filled)", 0.0, 100.0, auto_pan, step=0.1, help="Automatically calculated to make total retained 100%")
                 
                 gravel = r38 + r4
-                sand = r10 + r40 + r200
+                sand = r10 + r20 + r40 + r100 + r200
                 fines_total = r_pan
 
             # Hydrometer split for fines (Silt vs Clay split)
@@ -117,7 +125,6 @@ elif selected == "Soil Classification":
             else:
                 st.success(f"✅ Total Percentage: `{total_percent:.1f}%`")
         else:
-            # For Sieve analysis where fines dominate, calculate exact fractions summing to 100%
             total_sieve_sum = gravel + sand + fines_total
             if total_sieve_sum > 0:
                 gravel = (gravel / total_sieve_sum) * 100.0
@@ -129,12 +136,10 @@ elif selected == "Soil Classification":
 
         st.header("2. Atterberg Limits (%)")
         
-        # Initialize session state for Atterberg limits if not present
         if 'll_val' not in st.session_state: st.session_state.ll_val = 45.0
         if 'pl_val' not in st.session_state: st.session_state.pl_val = 20.0
         if 'pi_val' not in st.session_state: st.session_state.pi_val = 25.0
 
-        # Callback functions for reactive updating
         def update_pi():
             st.session_state.pi_val = max(0.0, st.session_state.ll_val - st.session_state.pl_val)
 
