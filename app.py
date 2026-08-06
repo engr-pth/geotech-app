@@ -51,10 +51,8 @@ if selected == "Home":
     ဤ Web App သည် Geotechnical Engineering တွက်ချက်မှုများအတွက် Tool စုံလင်စွာ ပါဝင်သော Platform ဖြစ်ပါသည်။ 
 
     👈 **ဘေးဘက် Sidebar မီနူးမှ မိမိအသုံးပြုလိုသည့် Tool ကို ရွေးချယ်ပါ:**
-    * **Soil Classification:** Grain size distribution နှင့် Atterberg limits များဖြင့် မြေအမျိုးအစားခွဲရန်
-    * **Shallow Foundation:**
-        * **Isolated Footing:** Single Column Footing Design တွက်ချက်ရန်
-        * **Continuous Wall Footing:** Continuous Wall Footing Design တွက်ချက်ရန်
+    * **Soil Classification:** Grain size distribution (Extended Sieve & Hydrometer) နှင့် Atterberg limits များဖြင့် မြေအမျိုးအစားခွဲရန်
+    * **Shallow Foundation:** Footing Design တွက်ချက်ရန်
     """)
 
 # ----------------------------------------------------
@@ -70,7 +68,7 @@ elif selected == "Soil Classification":
         st.header("1. Grain Size Distribution Input Method")
         input_method = st.radio(
             "Select Input Type",
-            ["Direct Percentages (Gravel, Sand, Silt, Clay)", "Sieve Analysis (% Passing / Retained on Sieve #)"],
+            ["Direct Percentages (Gravel, Sand, Silt, Clay)", "Extended Sieve & Hydrometer Analysis"],
             key="soil_input_method"
         )
 
@@ -80,37 +78,53 @@ elif selected == "Soil Classification":
             silt = st.number_input("Silt (0.002mm - 0.075mm) %", 0.0, 100.0, 30.0, step=0.1)
             clay = st.number_input("Clay (< 0.002mm) %", 0.0, 100.0, 20.0, step=0.1)
         else:
-            st.markdown("Enter Sieve Analysis Data (Standard ASTM Sieves)")
+            st.markdown("### 🔍 Extended Sieve Analysis Data")
             sieve_basis = st.radio("Sieve Data Format", ["% Passing", "% Retained"], horizontal=True)
             
-            # Standard Sieves: 3/8" (9.5mm), #4 (4.75mm), #10 (2.0mm), #40 (0.425mm), #200 (0.075mm)
             if sieve_basis == "% Passing":
-                p38 = st.number_input("3/8 inch (9.5 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
-                p4 = st.number_input("Sieve #4 (4.75 mm) - % Passing", 0.0, 100.0, 85.0, step=0.1)
-                p10 = st.number_input("Sieve #10 (2.0 mm) - % Passing", 0.0, 100.0, 70.0, step=0.1)
-                p40 = st.number_input("Sieve #40 (0.425 mm) - % Passing", 0.0, 100.0, 55.0, step=0.1)
-                p200 = st.number_input("Sieve #200 (0.075 mm) - % Passing", 0.0, 100.0, 50.0, step=0.1)
+                p3in  = st.number_input("3 inch (75 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
+                p15in = st.number_input("1.5 inch (37.5 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
+                p34in = st.number_input("3/4 inch (19 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
+                p38in = st.number_input("3/8 inch (9.5 mm) - % Passing", 0.0, 100.0, 95.0, step=0.1)
+                p4    = st.number_input("Sieve #4 (4.75 mm) - % Passing", 0.0, 100.0, 85.0, step=0.1)
+                p10   = st.number_input("Sieve #10 (2.0 mm) - % Passing", 0.0, 100.0, 72.0, step=0.1)
+                p20   = st.number_input("Sieve #20 (0.85 mm) - % Passing", 0.0, 100.0, 65.0, step=0.1)
+                p40   = st.number_input("Sieve #40 (0.425 mm) - % Passing", 0.0, 100.0, 58.0, step=0.1)
+                p60   = st.number_input("Sieve #60 (0.25 mm) - % Passing", 0.0, 100.0, 54.0, step=0.1)
+                p140  = st.number_input("Sieve #140 (0.106 mm) - % Passing", 0.0, 100.0, 52.0, step=0.1)
+                p200  = st.number_input("Sieve #200 (0.075 mm) - % Passing", 0.0, 100.0, 50.0, step=0.1)
                 
-                # Derive components from sieve passing
                 gravel = max(0.0, 100.0 - p4)
                 sand = max(0.0, p4 - p200)
                 fines_total = p200
             else:
-                r38 = st.number_input("3/8 inch (9.5 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
-                r4 = st.number_input("Sieve #4 (4.75 mm) - % Retained", 0.0, 100.0, 15.0, step=0.1)
-                r10 = st.number_input("Sieve #10 (2.0 mm) - % Retained", 0.0, 100.0, 15.0, step=0.1)
-                r40 = st.number_input("Sieve #40 (0.425 mm) - % Retained", 0.0, 100.0, 15.0, step=0.1)
-                r200 = st.number_input("Sieve #200 (0.075 mm) - % Retained", 0.0, 100.0, 5.0, step=0.1)
-                r_pan = st.number_input("Pan - % Retained", 0.0, 100.0, 50.0, step=0.1)
+                r3in  = st.number_input("3 inch (75 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
+                r15in = st.number_input("1.5 inch (37.5 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
+                r34in = st.number_input("3/4 inch (19 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
+                r38in = st.number_input("3/8 inch (9.5 mm) - % Retained", 0.0, 100.0, 5.0, step=0.1)
+                r4    = st.number_input("Sieve #4 (4.75 mm) - % Retained", 0.0, 100.0, 10.0, step=0.1)
+                r10   = st.number_input("Sieve #10 (2.0 mm) - % Retained", 0.0, 100.0, 13.0, step=0.1)
+                r20   = st.number_input("Sieve #20 (0.85 mm) - % Retained", 0.0, 100.0, 7.0, step=0.1)
+                r40   = st.number_input("Sieve #40 (0.425 mm) - % Retained", 0.0, 100.0, 7.0, step=0.1)
+                r60   = st.number_input("Sieve #60 (0.25 mm) - % Retained", 0.0, 100.0, 4.0, step=0.1)
+                r140  = st.number_input("Sieve #140 (0.106 mm) - % Retained", 0.0, 100.0, 2.0, step=0.1)
+                r200  = st.number_input("Sieve #200 (0.075 mm) - % Retained", 0.0, 100.0, 2.0, step=0.1)
+                r_pan = st.number_input("Pan (Fines) - % Retained", 0.0, 100.0, 50.0, step=0.1)
                 
-                gravel = r38 + r4
-                sand = r10 + r40 + r200
+                gravel = r3in + r15in + r34in + r38in + r4
+                sand = r10 + r20 + r40 + r60 + r140 + r200
                 fines_total = r_pan
 
-            # Hydrometer split for fines (Silt vs Clay split approx default 60:40 or user adjustable if needed)
-            silt_ratio = st.slider("Silt / Fines Ratio (%)", 0.0, 100.0, 60.0, step=1.0)
-            silt = fines_total * (silt_ratio / 100.0)
-            clay = fines_total * (1.0 - (silt_ratio / 100.0))
+            st.markdown("### 🧪 Hydrometer Analysis (Fines Breakdown)")
+            hydro_mode = st.radio("Hydrometer Input Mode", ["Slider Ratio", "Direct Silt & Clay %"], horizontal=True)
+            
+            if hydro_mode == "Slider Ratio":
+                silt_ratio = st.slider("Silt Ratio of Fines (%)", 0.0, 100.0, 60.0, step=1.0)
+                silt = fines_total * (silt_ratio / 100.0)
+                clay = fines_total * (1.0 - (silt_ratio / 100.0))
+            else:
+                silt = st.number_input("Silt Percentage (%)", 0.0, 100.0, 30.0, step=0.1)
+                clay = st.number_input("Clay Percentage (%)", 0.0, 100.0, 20.0, step=0.1)
 
         fines = silt + clay
         total_percent = gravel + sand + silt + clay
@@ -118,13 +132,324 @@ elif selected == "Soil Classification":
         if abs(total_percent - 100.0) > 0.05 and input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
             st.error(f"⚠️ **Total Percentage Error:** {total_percent:.1f}% (Must equal 100%)")
         else:
-            st.success(f"✅ Total Percentage: `{total_percent:.1f}%` | **Fines (< 0.075mm):** `{fines:.1f}%`")
+            st.success(f"✅ Total: `{total_percent:.1f}%` | **Gravel:** `{gravel:.1f}%` | **Sand:** `{sand:.1f}%` | **Fines:** `{fines:.1f}%`")
         
-        st.header("2. Atterberg Limits (%)")
-        LL = st.number_input("Liquid Limit (LL)", 0.0, 150.0, 45.0, step=0.1)
-        PL = st.number_input("Plastic Limit (PL)", 0.0, 100.0, 20.0, step=0.1)
-        PI = max(0.0, LL - PL)
-        st.info(f"**Plasticity Index (PI):** `{PI:.1f}%`")
+        st.header("2. Atterberg Limits (%) - Smart Input")
+        calc_mode = st.selectbox("Choose 2 Known Parameters to Calculate the 3rd", ["Calculate PI from LL & PL", "Calculate PL from LL & PI", "Calculate LL from PL & PI"])
+        
+        if calc_mode == "Calculate PI from LL & PL":
+            LL = st.number_input("Liquid Limit (LL)", 0.0, 150.0, 45.0, step=0.1)
+            PL = st.number_input("Plastic Limit (PL)", 0.0, 100.0, 20.0, step=0.1)
+            PI = max(0.0, LL - PL)
+            st.info(f"✨ **Calculated Plasticity Index (PI):** `{PI:.1f}%`")
+        elif calc_mode == "Calculate PL from LL & PI":
+            LL = st.number_input("Liquid Limit (LL)", 0.0, 150.0, 45.0, step=0.1)
+            PI = st.number_input("Plasticity Index (PI)", 0.0, 100.0, 25.0, step=0.1)
+            PL = max(0.0, LL - PI)
+            st.info(f"✨ **Calculated Plastic Limit (PL):** `{PL:.1f}%`")
+        else:
+            PL = st.number_input("Plastic Limit (PL)", 0.0, 100.0, 20.0, step=0.1)
+            PI = st.number_input("Plasticity Index (PI)", 0.0, 100.0, 25.0, step=0.1)
+            LL = PL + PI
+            st.info(f"✨ **Calculated Liquid Limit (LL):** `{LL:.1f}%`")
+        
+        st.header("3. Grain Size Parameters (Optional)")
+        Cu = st.number_input("Uniformity Coefficient (Cu)", 0.0, 50.0, 4.0, step=0.1)
+        Cc = st.number_input("Coefficient of Curvature (Cc)", 0.0, 10.0, 1.0, step=0.1)
+        
+        st.header("4. Select Primary Classification Standard")
+        system = st.radio("Standard", ["USCS (ASTM D2487)", "AASHTO (M 145)", "BS 5930 / Eurocode", "IS 1498 (Indian Standard)"])
+
+    A_line = 0.73 * (LL - 20) if LL >= 20 else 0.0
+
+    def classify_uscs(gravel, sand, fines, LL, PI, Cu, Cc):
+        if fines >= 50:
+            if LL >= 50:
+                return "CH (High Plasticity Clay)" if PI > A_line else "MH (Elastic Silt)"
+            else:
+                if PI > A_line and PI > 7:
+                    return "CL (Lean Clay)"
+                elif PI < A_line and PI < 4:
+                    return "ML (Low Plasticity Silt)"
+                else:
+                    return "CL-ML (Silty Clay)"
+        else:
+            if gravel > sand:
+                if fines < 5:
+                    return "GW (Well-graded Gravel)" if (Cu >= 4 and 1 <= Cc <= 3) else "GP (Poorly-graded Gravel)"
+                elif fines > 12:
+                    return "GC (Clayey Gravel)" if PI > A_line else "GM (Silty Gravel)"
+                else:
+                    return "GW-GM / GP-GC (Gravel with Fines)"
+            else:
+                if fines < 5:
+                    return "SW (Well-graded Sand)" if (Cu >= 6 and 1 <= Cc <= 3) else "SP (Poorly-graded Sand)"
+                elif fines > 12:
+                    return "SC (Clayey Sand)" if PI > A_line else "SM (Silty Sand)"
+                else:
+                    return "SW-SM / SP-SC (Sand with Fines)"
+
+    def classify_aashto(fines, LL, PI, gravel, sand):
+        GI = (fines - 35) * (0.2 + 0.005 * (LL - 40)) + 0.01 * (fines - 15) * (PI - 10)
+        GI = max(0, int(round(GI)))
+        if fines <= 35:
+            if fines <= 15 and PI <= 6:
+                group = "A-1-a" if gravel > sand else "A-1-b"
+            elif fines <= 25 and (LL == 0 or PI <= 6):
+                group = "A-3 (Fine Sand)"
+            else:
+                if PI <= 10:
+                    group = "A-2-4" if LL <= 40 else "A-2-5"
+                else:
+                    group = "A-2-6" if LL <= 40 else "A-2-7"
+            return f"{group} (GI = 0)"
+        else:
+            if LL <= 40:
+                group = "A-4" if PI <= 10 else "A-6"
+            else:
+                group = "A-7-5" if PI <= (LL - 30) else "A-7-6"
+            return f"{group} (GI = {GI})"
+
+    def classify_bs(fines, LL, PI):
+        if fines >= 35:
+            if LL < 35: qual = "L (Low Plasticity)"
+            elif 35 <= LL < 50: qual = "I (Intermediate Plasticity)"
+            elif 50 <= LL < 70: qual = "H (High Plasticity)"
+            elif 70 <= LL < 90: qual = "V (Very High Plasticity)"
+            else: qual = "E (Extremely High Plasticity)"
+            
+            soil_type = "Clay (C)" if PI > A_line else "Silt (M)"
+            return f"{soil_type} - {qual}"
+        else:
+            return "Coarse-Grained Soil (Gravel/Sand)"
+
+    def classify_is_1498(fines, LL, PI):
+        if fines >= 50:
+            if LL > 50:
+                return "CH (High Plasticity Clay)" if PI > A_line else "MH (High Plasticity Silt)"
+            elif 35 <= LL <= 50:
+                return "CI (Intermediate Plasticity Clay)" if PI > A_line else "MI (Intermediate Plasticity Silt)"
+            else:
+                return "CL (Low Plasticity Clay)" if PI > A_line else "ML (Low Plasticity Silt)"
+        else:
+            return "Coarse-Grained Soil (Gravel/Sand)"
+
+    with col_res:
+        st.header("📊 Classification Results")
+        
+        uscs_res = classify_uscs(gravel, sand, fines, LL, PI, Cu, Cc)
+        aashto_res = classify_aashto(fines, LL, PI, gravel, sand)
+        bs_res = classify_bs(fines, LL, PI)
+        is_res = classify_is_1498(fines, LL, PI)
+        
+        if "USCS" in system:
+            st.success(f"**USCS Symbol:** `{uscs_res}`")
+        elif "AASHTO" in system:
+            st.success(f"**AASHTO Group:** `{aashto_res}`")
+        elif "BS 5930" in system:
+            st.success(f"**BS 5930 Standard:** `{bs_res}`")
+        else:
+            st.success(f"**IS 1498 Symbol:** `{is_res}`")
+            
+        st.markdown("---")
+        st.subheader("🔄 Cross-Standard Comparison")
+        st.json({
+            "USCS (ASTM D2487)": uscs_res,
+            "AASHTO (Highway)": aashto_res,
+            "BS 5930 (British/Euro)": bs_res,
+            "IS 1498 (Indian Standard)": is_res
+        })
+        
+        st.subheader("🧱 Soil Composition Breakdown")
+        fig_bar, ax_bar = plt.subplots(figsize=(6, 1.2))
+        components = ['Gravel', 'Sand', 'Silt', 'Clay']
+        values = [gravel, sand, silt, clay]
+        colors_list = ['#8d6e63', '#d4e157', '#4fc3f7', '#e57373']
+        
+        left = 0
+        for comp, val, col in zip(components, values, colors_list):
+            if val > 0:
+                ax_bar.barh('Composition', val, left=left, color=col, label=f"{comp}: {val:.1f}%")
+                left += val
+                
+        ax_bar.set_xlim(0, 100)
+        ax_bar.axis('off')
+        ax_bar.legend(loc='lower center', bbox_to_anchor=(0.5, -0.8), ncol=4, frameon=False)
+        st.pyplot(fig_bar)
+
+        st.subheader("📈 Casagrande Plasticity Chart")
+        fig, ax = plt.subplots(figsize=(6, 3.5))
+        ll_vals = np.linspace(0, 100, 100)
+        a_line_vals = 0.73 * (ll_vals - 20)
+        
+        ax.plot(ll_vals, a_line_vals, color='red', linestyle='--', label="A-Line")
+        ax.axvline(35, color='gray', linestyle=':', label="LL=35%")
+        ax.axvline(50, color='gray', linestyle=':', label="LL=50%")
+        ax.scatter([LL], [PI], color='blue', s=80, zorder=5, label=f"Soil (LL={LL}, PI={PI})")
+        
+        ax.set_xlim(0, 100)
+        ax.set_ylim(0, 60)
+        ax.set_xlabel("Liquid Limit (LL %)")
+        ax.set_ylabel("Plasticity Index (PI %)")
+        ax.grid(True, linestyle=':', alpha=0.6)
+        ax.legend(loc="upper left")
+        
+        st.pyplot(fig)
+
+# ----------------------------------------------------import io
+import matplotlib.patches as patches
+import matplotlib.pyplot as plt
+import numpy as np
+import streamlit as st
+from reportlab.lib import colors
+from reportlab.lib.pagesizes import letter
+from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+from reportlab.platypus import (
+    Image as RLImage,
+    Paragraph,
+    SimpleDocTemplate,
+    Spacer,
+    Table,
+)
+from streamlit_option_menu import option_menu
+
+# Page Config Setup
+st.set_page_config(
+    page_title="Geotechnical Suite",
+    page_icon="🪨",
+    layout="wide"
+)
+
+# Sidebar Menu Definition with Nested Navigation
+with st.sidebar:
+    main_selected = option_menu(
+        menu_title="Main Menu",
+        options=["Home", "Soil Classification", "Shallow Foundation"],
+        icons=["house-fill", "journal-text", "layers-fill"],
+        default_index=0,
+        key="main_menu_nav"
+    )
+    
+    if main_selected == "Shallow Foundation":
+        sub_selected = st.radio(
+            "📌 Select Foundation Type:",
+            ["Isolated Footing", "Continuous Wall Footing"],
+            key="sub_menu_nav"
+        )
+        selected = sub_selected
+    else:
+        selected = main_selected
+
+# ----------------------------------------------------
+# 1. HOME PAGE
+# ----------------------------------------------------
+if selected == "Home":
+    st.title("🧱 Geotechnical Engineering Calculation Suite")
+    st.markdown("""
+    ဤ Web App သည် Geotechnical Engineering တွက်ချက်မှုများအတွက် Tool စုံလင်စွာ ပါဝင်သော Platform ဖြစ်ပါသည်။ 
+
+    👈 **ဘေးဘက် Sidebar မီနူးမှ မိမိအသုံးပြုလိုသည့် Tool ကို ရွေးချယ်ပါ:**
+    * **Soil Classification:** Grain size distribution (Extended Sieve & Hydrometer) နှင့် Atterberg limits များဖြင့် မြေအမျိုးအစားခွဲရန်
+    * **Shallow Foundation:** Footing Design တွက်ချက်ရန်
+    """)
+
+# ----------------------------------------------------
+# 2. SOIL CLASSIFICATION PAGE
+# ----------------------------------------------------
+elif selected == "Soil Classification":
+    st.title("🧪 Multi-Standard Soil Classification Suite")
+    st.caption("Supports USCS (ASTM D2487), AASHTO (M 145), BS 5930 / Eurocode 7, and IS 1498 (Indian Standard)")
+
+    col_in, col_res = st.columns([1, 1.2])
+
+    with col_in:
+        st.header("1. Grain Size Distribution Input Method")
+        input_method = st.radio(
+            "Select Input Type",
+            ["Direct Percentages (Gravel, Sand, Silt, Clay)", "Extended Sieve & Hydrometer Analysis"],
+            key="soil_input_method"
+        )
+
+        if input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
+            gravel = st.number_input("Gravel (> 4.75mm) %", 0.0, 100.0, 15.0, step=0.1)
+            sand = st.number_input("Sand (0.075mm - 4.75mm) %", 0.0, 100.0, 35.0, step=0.1)
+            silt = st.number_input("Silt (0.002mm - 0.075mm) %", 0.0, 100.0, 30.0, step=0.1)
+            clay = st.number_input("Clay (< 0.002mm) %", 0.0, 100.0, 20.0, step=0.1)
+        else:
+            st.markdown("### 🔍 Extended Sieve Analysis Data")
+            sieve_basis = st.radio("Sieve Data Format", ["% Passing", "% Retained"], horizontal=True)
+            
+            if sieve_basis == "% Passing":
+                p3in  = st.number_input("3 inch (75 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
+                p15in = st.number_input("1.5 inch (37.5 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
+                p34in = st.number_input("3/4 inch (19 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
+                p38in = st.number_input("3/8 inch (9.5 mm) - % Passing", 0.0, 100.0, 95.0, step=0.1)
+                p4    = st.number_input("Sieve #4 (4.75 mm) - % Passing", 0.0, 100.0, 85.0, step=0.1)
+                p10   = st.number_input("Sieve #10 (2.0 mm) - % Passing", 0.0, 100.0, 72.0, step=0.1)
+                p20   = st.number_input("Sieve #20 (0.85 mm) - % Passing", 0.0, 100.0, 65.0, step=0.1)
+                p40   = st.number_input("Sieve #40 (0.425 mm) - % Passing", 0.0, 100.0, 58.0, step=0.1)
+                p60   = st.number_input("Sieve #60 (0.25 mm) - % Passing", 0.0, 100.0, 54.0, step=0.1)
+                p140  = st.number_input("Sieve #140 (0.106 mm) - % Passing", 0.0, 100.0, 52.0, step=0.1)
+                p200  = st.number_input("Sieve #200 (0.075 mm) - % Passing", 0.0, 100.0, 50.0, step=0.1)
+                
+                gravel = max(0.0, 100.0 - p4)
+                sand = max(0.0, p4 - p200)
+                fines_total = p200
+            else:
+                r3in  = st.number_input("3 inch (75 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
+                r15in = st.number_input("1.5 inch (37.5 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
+                r34in = st.number_input("3/4 inch (19 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
+                r38in = st.number_input("3/8 inch (9.5 mm) - % Retained", 0.0, 100.0, 5.0, step=0.1)
+                r4    = st.number_input("Sieve #4 (4.75 mm) - % Retained", 0.0, 100.0, 10.0, step=0.1)
+                r10   = st.number_input("Sieve #10 (2.0 mm) - % Retained", 0.0, 100.0, 13.0, step=0.1)
+                r20   = st.number_input("Sieve #20 (0.85 mm) - % Retained", 0.0, 100.0, 7.0, step=0.1)
+                r40   = st.number_input("Sieve #40 (0.425 mm) - % Retained", 0.0, 100.0, 7.0, step=0.1)
+                r60   = st.number_input("Sieve #60 (0.25 mm) - % Retained", 0.0, 100.0, 4.0, step=0.1)
+                r140  = st.number_input("Sieve #140 (0.106 mm) - % Retained", 0.0, 100.0, 2.0, step=0.1)
+                r200  = st.number_input("Sieve #200 (0.075 mm) - % Retained", 0.0, 100.0, 2.0, step=0.1)
+                r_pan = st.number_input("Pan (Fines) - % Retained", 0.0, 100.0, 50.0, step=0.1)
+                
+                gravel = r3in + r15in + r34in + r38in + r4
+                sand = r10 + r20 + r40 + r60 + r140 + r200
+                fines_total = r_pan
+
+            st.markdown("### 🧪 Hydrometer Analysis (Fines Breakdown)")
+            hydro_mode = st.radio("Hydrometer Input Mode", ["Slider Ratio", "Direct Silt & Clay %"], horizontal=True)
+            
+            if hydro_mode == "Slider Ratio":
+                silt_ratio = st.slider("Silt Ratio of Fines (%)", 0.0, 100.0, 60.0, step=1.0)
+                silt = fines_total * (silt_ratio / 100.0)
+                clay = fines_total * (1.0 - (silt_ratio / 100.0))
+            else:
+                silt = st.number_input("Silt Percentage (%)", 0.0, 100.0, 30.0, step=0.1)
+                clay = st.number_input("Clay Percentage (%)", 0.0, 100.0, 20.0, step=0.1)
+
+        fines = silt + clay
+        total_percent = gravel + sand + silt + clay
+        
+        if abs(total_percent - 100.0) > 0.05 and input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
+            st.error(f"⚠️ **Total Percentage Error:** {total_percent:.1f}% (Must equal 100%)")
+        else:
+            st.success(f"✅ Total: `{total_percent:.1f}%` | **Gravel:** `{gravel:.1f}%` | **Sand:** `{sand:.1f}%` | **Fines:** `{fines:.1f}%`")
+        
+        st.header("2. Atterberg Limits (%) - Smart Input")
+        calc_mode = st.selectbox("Choose 2 Known Parameters to Calculate the 3rd", ["Calculate PI from LL & PL", "Calculate PL from LL & PI", "Calculate LL from PL & PI"])
+        
+        if calc_mode == "Calculate PI from LL & PL":
+            LL = st.number_input("Liquid Limit (LL)", 0.0, 150.0, 45.0, step=0.1)
+            PL = st.number_input("Plastic Limit (PL)", 0.0, 100.0, 20.0, step=0.1)
+            PI = max(0.0, LL - PL)
+            st.info(f"✨ **Calculated Plasticity Index (PI):** `{PI:.1f}%`")
+        elif calc_mode == "Calculate PL from LL & PI":
+            LL = st.number_input("Liquid Limit (LL)", 0.0, 150.0, 45.0, step=0.1)
+            PI = st.number_input("Plasticity Index (PI)", 0.0, 100.0, 25.0, step=0.1)
+            PL = max(0.0, LL - PI)
+            st.info(f"✨ **Calculated Plastic Limit (PL):** `{PL:.1f}%`")
+        else:
+            PL = st.number_input("Plastic Limit (PL)", 0.0, 100.0, 20.0, step=0.1)
+            PI = st.number_input("Plasticity Index (PI)", 0.0, 100.0, 25.0, step=0.1)
+            LL = PL + PI
+            st.info(f"✨ **Calculated Liquid Limit (LL):** `{LL:.1f}%`")
         
         st.header("3. Grain Size Parameters (Optional)")
         Cu = st.number_input("Uniformity Coefficient (Cu)", 0.0, 50.0, 4.0, step=0.1)
