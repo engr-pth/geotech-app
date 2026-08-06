@@ -1,6 +1,6 @@
 import io
 import matplotlib.patches as patches
-import matplotlib.plt as plt
+import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
 from reportlab.lib import colors
