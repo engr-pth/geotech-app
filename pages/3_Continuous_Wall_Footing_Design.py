@@ -23,7 +23,8 @@ st.title("🧱 Continuous RC Wall Footing Design Suite")
 col_in, col_res = st.columns([1.1, 1.1])
 
 with col_in:
-    st.header("1. Unit System & Loading Inputs")
+    # --- Section 1: Single Footing Style ---
+    st.header("1. General & Unit System Selection")
     unit_system = st.radio(
         "Unit System",
         [
@@ -44,20 +45,23 @@ with col_in:
     u_rebar = "in" if is_imperial else "mm"
     u_fc = "psi" if is_imperial else "MPa"
 
-    col_p1, col_p2 = st.columns(2)
-    P_dl = col_p1.number_input(f"Dead Load P_DL ({u_force_per_len})", 0.0, 5000.0, 100.0 if not is_imperial else 8.0)
-    P_ll = col_p2.number_input(f"Live Load P_LL ({u_force_per_len})", 0.0, 5000.0, 50.0 if not is_imperial else 4.0)
-
-    st.header("2. Geotechnical Soil Parameters Mode")
     geo_mode = st.radio(
         "Geotechnical Input Option",
         [
             "Direct Gross Allowable Soil Capacity (q_allow)",
             "c-phi Parameters (Analytical - Terzaghi/Meyerhof)",
             "SPT N-value (Empirical Method)",
-        ]
+        ],
     )
 
+    # --- Section 2: Loading Inputs ---
+    st.header("2. Applied Line Loads")
+    col_p1, col_p2 = st.columns(2)
+    P_dl = col_p1.number_input(f"Dead Load P_DL ({u_force_per_len})", 0.0, 5000.0, 100.0 if not is_imperial else 8.0)
+    P_ll = col_p2.number_input(f"Live Load P_LL ({u_force_per_len})", 0.0, 5000.0, 50.0 if not is_imperial else 4.0)
+
+    # --- Section 3: Geotechnical Parameters ---
+    st.header("3. Geotechnical Soil Parameters Mode")
     if "Direct" in geo_mode:
         q_allow_input = st.number_input(f"Gross Allowable Soil Cap. q_allow ({u_stress})", 1.0, 10000.0, 150.0 if not is_imperial else 3.0)
         c_val, phi_val, n_spt, FS = 0.0, 0.0, 0, 3.0
@@ -72,7 +76,8 @@ with col_in:
         c_val, phi_val, q_allow_input = 0.0, 0.0, None
         FS = st.number_input("Safety Factor (FS)", 1.0, 10.0, 3.0)
 
-    st.header("3. Geometry & Water Table")
+    # --- Section 4: Geometry ---
+    st.header("4. Geometry Settings (Footing & Wall)")
     col_g1, col_g2 = st.columns(2)
     b_wall = col_g1.number_input(f"Wall Thickness b_w ({u_len})", 0.1, 5.0, 0.25 if not is_imperial else 0.833)
     B = col_g2.number_input(f"Footing Width B ({u_len})", 0.5, 30.0, 1.8 if not is_imperial else 6.0)
@@ -85,13 +90,14 @@ with col_in:
     gamma_soil = col_s1.number_input(f"Soil γ ({u_gamma})", 0.0, 300.0, 18.0 if not is_imperial else 115.0)
     Dw = col_s2.number_input(f"Water Table Depth Dw ({u_len})", 0.0, 50.0, 1.0 if not is_imperial else 3.5)
 
-    st.header("4. Materials & Structural Details")
+    # --- Section 5: Structural & Rebar Details ---
+    st.header("5. Structural & Rebar Details")
     aci_version = st.selectbox("ACI Standard Code", ["ACI 318-22", "ACI 318-19", "ACI 318-14", "ACI 318-11"])
     col_m1, col_m2 = st.columns(2)
     fc = col_m1.number_input(f"Concrete f'c ({u_fc})", 10.0, 10000.0, 28.0 if not is_imperial else 4000.0)
     fy = col_m2.number_input(f"Steel fy ({u_fc})", 100.0, 100000.0, 420.0 if not is_imperial else 60000.0)
 
-    rebar_system = st.radio("Rebar Size Standard", ["Metric Sizes (mm)", "Imperial Sizes (# / in)"])
+    rebar_system = st.radio("Rebar Unit System Standard", ["Metric Sizes (mm)", "Imperial Sizes (# / in)"])
     if "Metric" in rebar_system:
         main_rebar_opts = {
             "16 mm": {"dia": 16.0, "area": 201.1},
@@ -102,7 +108,7 @@ with col_in:
         }
         temp_rebar_opts = {
             "10 mm": {"dia": 10.0, "area": 78.5},
-            "12 mm": {"dia": 12.0, "area": 113.1},
+            "12 mm": {"dia": 113.1, "area": 113.1},
             "16 mm": {"dia": 16.0, "area": 201.1},
             "18 mm": {"dia": 18.0, "area": 254.5},
             "20 mm": {"dia": 20.0, "area": 314.2},
@@ -127,7 +133,7 @@ with col_in:
     selected_main_bar = col_r1.selectbox("Main Rebar (Transverse)", list(main_rebar_opts.keys()))
     selected_temp_bar = col_r2.selectbox("Temperature & Shrinkage Rebar", list(temp_rebar_opts.keys()))
 
-    hook_type = st.radio("Main Rebar End Hook Type", ["None (Straight Bar)", "90-Degree Standard Hook", "180-Degree Standard Hook"])
+    hook_type = st.radio("Rebar End Hook Type", ["None (Straight Bar)", "90-Degree Standard Hook", "180-Degree Standard Hook"])
 
     calc_trigger = st.button("🚀 Calculate Continuous Wall Footing", type="primary", use_container_width=True)
 
@@ -203,7 +209,6 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         rho_min = 0.0018
         rho_req = max(rho_calc, rho_min)
         
-        # Area in mm^2/m
         main_bar_area = main_rebar_opts[selected_main_bar]["area"] if "Metric" in rebar_system else main_rebar_opts[selected_main_bar]["area"] * 645.16
         temp_bar_area = temp_rebar_opts[selected_temp_bar]["area"] if "Metric" in rebar_system else temp_rebar_opts[selected_temp_bar]["area"] * 645.16
 
@@ -220,7 +225,6 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         rho_min = 0.0018
         rho_req = max(rho_calc, rho_min)
         
-        # Area in in^2/ft
         main_bar_area = main_rebar_opts[selected_main_bar]["area"] if "Imperial" in rebar_system else main_rebar_opts[selected_main_bar]["area"] / 645.16
         temp_bar_area = temp_rebar_opts[selected_temp_bar]["area"] if "Imperial" in rebar_system else temp_rebar_opts[selected_temp_bar]["area"] / 645.16
 
@@ -236,25 +240,20 @@ if calc_trigger or "wall_calc_state" in st.session_state:
     s_main_final = int(min(s_main, min(3 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)))
     s_temp_final = int(min(s_temp, max_s_temp))
 
-    # --- Corrected Development Length Check (Unit Conversion Handled) ---
     raw_db = main_rebar_opts[selected_main_bar]["dia"]
-    
-    # Standardize db to match current unit_system
     if is_imperial:
         db_calc = raw_db if "Imperial" in rebar_system else (raw_db / 25.4)
     else:
         db_calc = raw_db if "Metric" in rebar_system else (raw_db * 25.4)
 
-    L_avail_val = cantilever_arm - cover  # in footing units (m or ft)
+    L_avail_val = cantilever_arm - cover
 
     if not is_imperial:
-        # SI Calculation (db in mm, fc in MPa, fy in MPa)
         L_avail_disp = L_avail_val * 1000.0
         ld_straight = (fy / (1.1 * np.sqrt(fc))) * db_calc
         ld_hook = (0.24 * fy / np.sqrt(fc)) * db_calc
         u_ld = "mm"
     else:
-        # FPS Calculation (db in inches, fc in psi, fy in psi)
         L_avail_disp = L_avail_val * 12.0
         ld_straight = (fy / (25.0 * np.sqrt(fc))) * db_calc
         ld_hook = (0.02 * fy / np.sqrt(fc)) * db_calc
@@ -263,9 +262,8 @@ if calc_trigger or "wall_calc_state" in st.session_state:
     ld_req = ld_hook if "Hook" in hook_type else ld_straight
     ld_status = L_avail_disp >= ld_req
 
-    # --- Refined Hook Drawing Logic ---
     def draw_footing_section():
-        fig, ax = plt.subplots(figsize=(7, 4.5))
+        fig, ax = plt.subplots(figsize=(6.5, 4.5))
         f_top, f_bottom = -Df, -Df - h_foot
 
         ax.fill_between([-B / 2 - 1.0, B / 2 + 1.0], [0, 0], [f_bottom - 0.4, f_bottom - 0.4], color="#E5D3B3", alpha=0.5)
@@ -291,7 +289,6 @@ if calc_trigger or "wall_calc_state" in st.session_state:
             r_hook = 0.04 if not is_imperial else 0.12
             tail_len = 0.05 if not is_imperial else 0.15
 
-            # Left Hook (Arc bending UP and INWARDS)
             theta_left = np.linspace(1.5 * np.pi, 0.5 * np.pi, 30)
             x_arc_left = left_x + r_hook * np.cos(theta_left)
             y_arc_left = (main_y + r_hook) + r_hook * np.sin(theta_left)
@@ -300,7 +297,6 @@ if calc_trigger or "wall_calc_state" in st.session_state:
             ax.plot([left_x, left_x + tail_len], 
                     [main_y + 2 * r_hook, main_y + 2 * r_hook], color="red", linewidth=2.0)
 
-            # Right Hook (Arc bending UP and INWARDS)
             theta_right = np.linspace(1.5 * np.pi, 0.5 * np.pi, 30)
             x_arc_right = right_x - r_hook * np.cos(theta_right)
             y_arc_right = (main_y + r_hook) + r_hook * np.sin(theta_right)
@@ -317,8 +313,8 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         ax.set_aspect("equal")
         ax.axis("off")
         
-        ax.legend(loc="upper right", fontsize=7, framealpha=0.9)
-        plt.title(f"Footing Elevation Section ({hook_type})", fontsize=10, fontweight="bold")
+        ax.legend(loc="upper right", fontsize=6.0)
+        plt.title(f"Footing Elevation Section ({hook_type})", fontsize=9, fontweight="bold")
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -328,7 +324,7 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         return buf
 
     def draw_footing_plan():
-        fig, ax = plt.subplots(figsize=(6, 4.5))
+        fig, ax = plt.subplots(figsize=(6.5, 6.5))
         unit_len_display = 2.0 if not is_imperial else 6.0
         
         foot_plan = patches.Rectangle((-B / 2, -unit_len_display / 2), B, unit_len_display, facecolor="#E5E7EB", edgecolor="#1F2937", linewidth=2, label="Footing Plan")
@@ -350,8 +346,8 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         ax.set_aspect("equal")
         ax.axis("off")
         
-        ax.legend(loc="lower right", fontsize=7, framealpha=0.9)
-        plt.title("Footing Top Structural Plan View", fontsize=10, fontweight="bold")
+        cover_val_disp = cover * (12.0 if is_imperial else 1000.0)
+        plt.title(f"Footing Structural Top Plan View (Cover = {cover_val_disp:.1f} {u_rebar})", fontsize=9, fontweight="bold")
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -360,7 +356,6 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         plt.close()
         return buf
 
-    # --- PDF Report Generator ---
     def generate_pdf_report(sec_buf, plan_buf):
         pdf_buf = io.BytesIO()
         doc = SimpleDocTemplate(
@@ -438,10 +433,10 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         story.append(Spacer(1, 6))
         story.append(Paragraph("6. Structural Detailing Drawings", h1_sec_style))
         
-        img_sec = RLImage(sec_buf, width=250, height=160)
-        img_plan = RLImage(plan_buf, width=250, height=160)
+        img_sec = RLImage(sec_buf, width=240, height=160)
+        img_plan = RLImage(plan_buf, width=240, height=160)
         
-        img_table = Table([[img_sec, img_plan]], colWidths=[260, 260])
+        img_table = Table([[img_sec, img_plan]], colWidths=[255, 255])
         img_table.setStyle([
             ('ALIGN', (0,0), (-1,-1), 'CENTER'),
             ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
@@ -456,20 +451,20 @@ if calc_trigger or "wall_calc_state" in st.session_state:
     plan_img = draw_footing_plan()
     pdf_file = generate_pdf_report(sec_img, plan_img)
 
+    # --- Section 6: Results Summary Display (Single Footing UI Alignment) ---
     with col_res:
-        st.header("📊 Continuous Footing Results")
+        st.header("📊 Results & Verification Summary")
         
-        st.subheader("1. Bearing Capacity Check")
-        c1, c2 = st.columns(2)
-        c1.metric("Service Soil Pressure", f"{q_service_actual:.2f} {u_stress}")
-        c2.metric("Net Allowable Capacity", f"{q_net_allow:.2f} {u_stress}", delta="✅ SAFE" if q_service_actual <= q_net_allow else "❌ OVERLOADED")
+        st.subheader("1. Eccentricity & Soil Pressure")
+        st.metric("Total Service P", f"{P_service:.2f} {u_force_per_len} (DL: {P_dl}, LL: {P_ll})")
+        st.metric("Actual Service Pressure", f"{q_service_actual:.2f} {u_stress}", delta="✅ SAFE" if q_service_actual <= q_net_allow else "❌ OVERLOADED")
 
-        st.subheader("2. Structural Shear Check")
-        st.metric("One-Way Shear (Vu / φVc)", f"{Vu_oneway:.2f} / {Phi_Vc:.2f} {u_force_per_len}", delta="✅ PASS" if Phi_Vc >= Vu_oneway else "❌ FAIL")
+        st.subheader("2. Structural Shears Check")
+        st.metric("One-Way Shear (Vu / φVc)", f"{Vu_oneway:.1f} / {Phi_Vc:.1f} {u_force_per_len}", delta="✅ PASS" if Phi_Vc >= Vu_oneway else "❌ FAIL")
 
         st.subheader("3. Reinforcement Arrangement")
-        st.markdown(f"• **Main Steel:** **{selected_main_bar} @ {s_main_final} {spacing_unit} c/c** ({hook_type})")
-        st.markdown(f"• **Temp/Shrinkage Steel:** **{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c**")
+        st.markdown(f"• **Main Steel:** Provide **{selected_main_bar} @ {s_main_final} {spacing_unit} c/c** ({hook_type})")
+        st.markdown(f"• **Temp/Shrinkage Steel:** Provide **{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c**")
 
         st.subheader("4. Development Length Verification ($L_d$)")
         st.metric(
@@ -478,15 +473,13 @@ if calc_trigger or "wall_calc_state" in st.session_state:
             delta="✅ PASS (Adequate Anchorage)" if ld_status else "❌ FAIL (Provide Hook or Increase B)"
         )
 
-        st.subheader("5. Detailing Cross-Section Elevation View")
-        st.image(sec_img, caption="Footing Elevation Cross-Section Diagram", use_column_width=True)
-
-        st.subheader("6. Top Structural Plan View")
-        st.image(plan_img, caption="Footing Top Structural Plan View", use_column_width=True)
+        st.subheader("5. Detailing Drawings")
+        st.image(sec_img, caption="Footing Elevation Cross-Section Diagram")
+        st.image(plan_img, caption="Footing Top Structural Plan View")
 
         st.markdown("---")
         st.download_button(
-            label="📄 Download Comprehensive PDF Calculation Report",
+            label="📄 Download Detailed Calculation PDF Report",
             data=pdf_file,
             file_name="Continuous_Wall_Footing_Report.pdf",
             mime="application/pdf",
