@@ -204,7 +204,6 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         rho_req = max(rho_calc, rho_min)
         
         As_main_req = rho_req * b_mm * d_mm_val
-        # Temperature & Shrinkage Rebar required per meter width (using total h)
         As_temp_req = 0.0018 * b_mm * h_mm_val
         spacing_unit = "mm"
     else:
@@ -218,14 +217,12 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         rho_req = max(rho_calc, rho_min)
         
         As_main_req = rho_req * b_in * d_in_val
-        # Temperature & Shrinkage Rebar required per foot width (using total h)
         As_temp_req = 0.0018 * b_in * h_in_val
         spacing_unit = "in"
 
     s_main = (main_rebar_opts[selected_main_bar]["area"] / As_main_req) * (1000.0 if not is_imperial else 12.0)
     s_temp = (temp_rebar_opts[selected_temp_bar]["area"] / As_temp_req) * (1000.0 if not is_imperial else 12.0)
 
-    # Max Spacing Verification for T&S Rebar: min(5h, 450 mm / 18 in)
     max_s_temp = min(5 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)
 
     s_main_final = int(min(s_main, min(3 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)))
@@ -425,10 +422,10 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         st.markdown(f"• **Temp/Shrinkage Steel:** **{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c**")
 
         st.subheader("4. Detailing Cross-Section Elevation View")
-        st.image(sec_img, caption="Footing Elevation Cross-Section Diagram", use_container_width=True)
+        st.image(sec_img, caption="Footing Elevation Cross-Section Diagram", use_column_width=True)
 
         st.subheader("5. Top Structural Plan View")
-        st.image(plan_img, caption="Footing Top Structural Plan View", use_container_width=True)
+        st.image(plan_img, caption="Footing Top Structural Plan View", use_column_width=True)
 
         st.markdown("---")
         st.download_button(
