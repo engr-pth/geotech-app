@@ -258,9 +258,9 @@ with col_res:
     
     uscs_sym, uscs_name = calculate_uscs(gravel, sand, fines_total, LL, PI, Cu, Cc, is_organic)
     
-    st.success(f"**USCS Symbol:** `{uscs_sym}`
+    st.success(f"""**USCS Symbol:** `{uscs_sym}`
 
-**USCS Group Name:** `{uscs_name}`")
+**USCS Group Name:** `{uscs_name}`""")
     
     st.subheader("💡 Atterberg Indices Summary")
     st.info(f"""
