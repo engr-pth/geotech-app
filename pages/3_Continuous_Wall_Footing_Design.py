@@ -93,11 +93,36 @@ with col_in:
 
     rebar_system = st.radio("Rebar Size Standard", ["Metric Sizes (mm)", "Imperial Sizes (# / in)"])
     if "Metric" in rebar_system:
-        main_rebar_opts = {"12 mm": {"dia": 12.0, "area": 113.1}, "16 mm": {"dia": 16.0, "area": 201.1}, "20 mm": {"dia": 20.0, "area": 314.2}}
-        temp_rebar_opts = {"10 mm": {"dia": 10.0, "area": 78.5}, "12 mm": {"dia": 12.0, "area": 113.1}}
+        # Full set of metric sizes as requested: 16, 18, 20, 22, 25 mm
+        main_rebar_opts = {
+            "16 mm": {"dia": 16.0, "area": 201.1},
+            "18 mm": {"dia": 18.0, "area": 254.5},
+            "20 mm": {"dia": 20.0, "area": 314.2},
+            "22 mm": {"dia": 22.0, "area": 380.1},
+            "25 mm": {"dia": 25.0, "area": 490.9},
+        }
+        temp_rebar_opts = {
+            "10 mm": {"dia": 10.0, "area": 78.5},
+            "12 mm": {"dia": 12.0, "area": 113.1},
+            "16 mm": {"dia": 16.0, "area": 201.1},
+            "18 mm": {"dia": 18.0, "area": 254.5},
+            "20 mm": {"dia": 20.0, "area": 314.2},
+            "22 mm": {"dia": 22.0, "area": 380.1},
+            "25 mm": {"dia": 25.0, "area": 490.9},
+        }
     else:
-        main_rebar_opts = {"#4 (0.500 in)": {"dia": 0.500, "area": 0.20}, "#5 (0.625 in)": {"dia": 0.31}, "#6 (0.750 in)": {"dia": 0.44}}
-        temp_rebar_opts = {"#3 (0.375 in)": {"dia": 0.375, "area": 0.11}, "#4 (0.500 in)": {"dia": 0.500, "area": 0.20}}
+        main_rebar_opts = {
+            "#5 (0.625 in)": {"dia": 0.625, "area": 0.31},
+            "#6 (0.750 in)": {"dia": 0.750, "area": 0.44},
+            "#7 (0.875 in)": {"dia": 0.875, "area": 0.60},
+            "#8 (1.000 in)": {"dia": 1.000, "area": 0.79},
+        }
+        temp_rebar_opts = {
+            "#3 (0.375 in)": {"dia": 0.375, "area": 0.11},
+            "#4 (0.500 in)": {"dia": 0.500, "area": 0.20},
+            "#5 (0.625 in)": {"dia": 0.625, "area": 0.31},
+            "#6 (0.750 in)": {"dia": 0.750, "area": 0.44},
+        }
 
     col_r1, col_r2 = st.columns(2)
     selected_main_bar = col_r1.selectbox("Main Rebar (Transverse)", list(main_rebar_opts.keys()))
@@ -175,7 +200,7 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         Rn = Mu_Nmm / (0.9 * b_mm * (d_mm_val**2))
         rho_calc = (0.85 * fc / fy) * (1.0 - np.sqrt(max(0.0, 1.0 - (2.0 * Rn) / (0.85 * fc))))
         
-        # Minimum Steel Ratio Control (Updated with Beam Min Logic)
+        # Minimum Steel Ratio Control
         rho_slab_min = 0.0018
         rho_beam_min = max((0.25 * np.sqrt(fc)) / fy, 1.4 / fy)
         rho_min = max(rho_slab_min, rho_beam_min)
@@ -206,40 +231,58 @@ if calc_trigger or "wall_calc_state" in st.session_state:
     s_main_final = int(min(s_main, min(3 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)))
     s_temp_final = int(min(s_temp, min(5 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)))
 
-    # Drawing Function
+    # --- Structural Section Drawing Function (with Legend & Corrected 180 Hook) ---
     def draw_footing_section():
         fig, ax = plt.subplots(figsize=(7, 4.5))
         f_top, f_bottom = -Df, -Df - h_foot
 
+        # Soil & Concrete Graphics
         ax.fill_between([-B / 2 - 1.0, B / 2 + 1.0], [0, 0], [f_bottom - 0.4, f_bottom - 0.4], color="#E5D3B3", alpha=0.5)
-        ax.add_patch(patches.Rectangle((-B / 2, f_bottom), B, h_foot, facecolor="#9CA3AF", edgecolor="black", linewidth=1.5))
-        ax.add_patch(patches.Rectangle((-b_wall / 2, f_top), b_wall, Df + 0.4, facecolor="#4B5563", edgecolor="black", linewidth=1.5))
+        ax.plot([-B / 2 - 1.0, B / 2 + 1.0], [0, 0], "k--", linewidth=1, label="Ground Level (GL)")
+        
+        footing_rect = patches.Rectangle((-B / 2, f_bottom), B, h_foot, facecolor="#9CA3AF", edgecolor="black", linewidth=1.5, label="Footing")
+        wall_rect = patches.Rectangle((-b_wall / 2, f_top), b_wall, Df + 0.4, facecolor="#4B5563", edgecolor="black", linewidth=1.5, label="RC Wall")
+        
+        ax.add_patch(footing_rect)
+        ax.add_patch(wall_rect)
 
         main_y = f_bottom + cover
         left_x, right_x = -B / 2 + cover, B / 2 - cover
-        ax.plot([left_x, right_x], [main_y, main_y], color="red", linewidth=2.5)
+        
+        # Main Rebar Line
+        ax.plot([left_x, right_x], [main_y, main_y], color="red", linewidth=2.5, label=f"Main Bar: {selected_main_bar}")
 
         hook_len = 0.12 if not is_imperial else 0.4
+        hook_gap = 0.03 if not is_imperial else 0.1
+        
+        # Hook Rendering
         if "90-Degree" in hook_type:
             ax.plot([left_x, left_x], [main_y, main_y + hook_len], color="red", linewidth=2.5)
             ax.plot([right_x, right_x], [main_y, main_y + hook_len], color="red", linewidth=2.5)
         elif "180-Degree" in hook_type:
+            # Corrected 180 degree hook geometry (loops back over itself)
+            # Left hook
             ax.plot([left_x, left_x], [main_y, main_y + hook_len], color="red", linewidth=2.5)
-            ax.plot([left_x, left_x + 0.03], [main_y + hook_len, main_y + hook_len], color="red", linewidth=2.5)
-            ax.plot([left_x + 0.03, left_x + 0.03], [main_y + hook_len, main_y + 0.03], color="red", linewidth=2.5)
-
+            ax.plot([left_x, left_x + hook_gap], [main_y + hook_len, main_y + hook_len], color="red", linewidth=2.5)
+            ax.plot([left_x + hook_gap, left_x + hook_gap], [main_y + hook_len, main_y], color="red", linewidth=2.5)
+            
+            # Right hook
             ax.plot([right_x, right_x], [main_y, main_y + hook_len], color="red", linewidth=2.5)
-            ax.plot([right_x, right_x - 0.03], [main_y + hook_len, main_y + hook_len], color="red", linewidth=2.5)
-            ax.plot([right_x - 0.03, right_x - 0.03], [main_y + hook_len, main_y + 0.03], color="red", linewidth=2.5)
+            ax.plot([right_x, right_x - hook_gap], [main_y + hook_len, main_y + hook_len], color="red", linewidth=2.5)
+            ax.plot([right_x - hook_gap, right_x - hook_gap], [main_y + hook_len, main_y], color="red", linewidth=2.5)
 
+        # Distribution Steel Dots
         dot_x_coords = np.linspace(left_x + 0.1, right_x - 0.1, 7)
-        ax.scatter(dot_x_coords, [main_y + 0.03] * 7, color="darkblue", s=25, zorder=5)
+        ax.scatter(dot_x_coords, [main_y + 0.03] * 7, color="darkblue", s=30, zorder=5, label=f"Dist. Bar: {selected_temp_bar}")
 
         ax.set_xlim(-B / 2 - 0.8, B / 2 + 0.8)
         ax.set_ylim(f_bottom - 0.6, 0.5)
         ax.set_aspect("equal")
         ax.axis("off")
-        plt.title(f"Wall Footing Detailing ({hook_type})", fontsize=10, fontweight="bold")
+        
+        # Add Legend to Elevation
+        ax.legend(loc="upper right", fontsize=7, framealpha=0.9)
+        plt.title(f"Footing Elevation Section ({hook_type})", fontsize=10, fontweight="bold")
         plt.tight_layout()
 
         buf = io.BytesIO()
@@ -248,8 +291,45 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         plt.close()
         return buf
 
-    # PDF Report Generator
-    def generate_pdf_report(sec_buf):
+    # --- Structural Plan Drawing Function (New Feature) ---
+    def draw_footing_plan():
+        fig, ax = plt.subplots(figsize=(6, 4.5))
+        unit_len_display = 2.0 if not is_imperial else 6.0  # Unit strip length shown in plan
+        
+        # Footing & Wall Contours in Plan
+        foot_plan = patches.Rectangle((-B / 2, -unit_len_display / 2), B, unit_len_display, facecolor="#E5E7EB", edgecolor="#1F2937", linewidth=2, label="Footing Plan")
+        wall_plan = patches.Rectangle((-b_wall / 2, -unit_len_display / 2), b_wall, unit_len_display, facecolor="#4B5563", edgecolor="black", linewidth=1.5, label="Wall Above")
+        
+        ax.add_patch(foot_plan)
+        ax.add_patch(wall_plan)
+
+        # Draw Main Steel Mesh Lines (Transverse)
+        y_lines = np.linspace(-unit_len_display / 2 + 0.1, unit_len_display / 2 - 0.1, 8)
+        for idx, y_pos in enumerate(y_lines):
+            ax.plot([-B / 2 + cover, B / 2 - cover], [y_pos, y_pos], color="red", linewidth=1.5, label="Transverse Rebar" if idx == 0 else "")
+
+        # Draw Distribution Steel Mesh Lines (Longitudinal)
+        x_lines = np.linspace(-B / 2 + cover + 0.05, B / 2 - cover - 0.05, 7)
+        for idx, x_pos in enumerate(x_lines):
+            ax.plot([x_pos, x_pos], [-unit_len_display / 2 + 0.05, unit_len_display / 2 - 0.05], color="darkblue", linestyle="--", linewidth=1.2, label="Longitudinal Rebar" if idx == 0 else "")
+
+        ax.set_xlim(-B / 2 - 0.5, B / 2 + 0.5)
+        ax.set_ylim(-unit_len_display / 2 - 0.4, unit_len_display / 2 + 0.4)
+        ax.set_aspect("equal")
+        ax.axis("off")
+        
+        ax.legend(loc="lower right", fontsize=7, framealpha=0.9)
+        plt.title("Footing Top Structural Plan View", fontsize=10, fontweight="bold")
+        plt.tight_layout()
+
+        buf = io.BytesIO()
+        plt.savefig(buf, format="png", dpi=200, bbox_inches="tight")
+        buf.seek(0)
+        plt.close()
+        return buf
+
+    # --- Comprehensive PDF Report Generator ---
+    def generate_pdf_report(sec_buf, plan_buf):
         pdf_buf = io.BytesIO()
         doc = SimpleDocTemplate(
             pdf_buf, pagesize=letter, rightMargin=36, leftMargin=36, topMargin=36, bottomMargin=36
@@ -257,62 +337,93 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         styles = getSampleStyleSheet()
 
         main_title_style = ParagraphStyle(
-            'MainTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=16, leading=20, textColor=colors.HexColor("#1A365D"), spaceAfter=8
+            'MainTitle', parent=styles['Heading1'], fontName='Helvetica-Bold', fontSize=15, leading=19, textColor=colors.HexColor("#1A365D"), spaceAfter=6
         )
         sub_title_style = ParagraphStyle(
-            'SubTitle', parent=styles['Normal'], fontName='Helvetica', fontSize=9, leading=13, textColor=colors.HexColor("#2D3748"), spaceAfter=12
+            'SubTitle', parent=styles['Normal'], fontName='Helvetica', fontSize=8.5, leading=12, textColor=colors.HexColor("#2D3748"), spaceAfter=10
         )
         h1_sec_style = ParagraphStyle(
-            'H1Sec', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=12, leading=16, textColor=colors.HexColor("#000000"), spaceBefore=10, spaceAfter=6
+            'H1Sec', parent=styles['Heading2'], fontName='Helvetica-Bold', fontSize=11, leading=15, textColor=colors.HexColor("#000000"), spaceBefore=8, spaceAfter=4
         )
         bullet_style = ParagraphStyle(
-            'BulletText', parent=styles['Normal'], fontName='Helvetica', fontSize=9, leading=13, textColor=colors.HexColor("#1A202C")
+            'BulletText', parent=styles['Normal'], fontName='Helvetica', fontSize=8.5, leading=12, textColor=colors.HexColor("#1A202C")
         )
         math_code_style = ParagraphStyle(
-            'MathCode', parent=styles['Normal'], fontName='Courier', fontSize=8.5, leading=12, textColor=colors.HexColor("#4A5568")
+            'MathCode', parent=styles['Normal'], fontName='Courier', fontSize=8.0, leading=11, textColor=colors.HexColor("#2C5282")
         )
 
         story = []
 
-        story.append(Paragraph("CONTINUOUS WALL FOOTING DESIGN CALCULATION REPORT", main_title_style))
+        story.append(Paragraph("STRUCTURAL & GEOTECHNICAL CONTINUOUS WALL FOOTING DESIGN REPORT", main_title_style))
         story.append(Paragraph(
             f"Code Standard: <b>{aci_version}</b> | Unit System: <b>{unit_system}</b> | Hook Type: <b>{hook_type}</b>",
             sub_title_style
         ))
 
-        story.append(Paragraph("1. Loadings & Geometry", h1_sec_style))
-        story.append(Paragraph(f"• Dead Load = {P_dl:.2f} {u_force_per_len} | Live Load = {P_ll:.2f} {u_force_per_len} | Pu = {Pu:.2f} {u_force_per_len}", bullet_style))
-        story.append(Paragraph(f"• Footing Width (B) = {B:.2f} {u_len} | Thickness (h) = {h_foot:.2f} {u_len} | Wall Thickness = {b_wall:.2f} {u_len}", bullet_style))
+        # 1. Loadings & Geometry
+        story.append(Paragraph("1. Applied Loads & Geometric Parameters", h1_sec_style))
+        story.append(Paragraph(f"• Dead Load (P_DL) = {P_dl:.2f} {u_force_per_len} | Live Load (P_LL) = {P_ll:.2f} {u_force_per_len}", bullet_style))
+        story.append(Paragraph(f"• Factored Line Load Pu = 1.2({P_dl:.2f}) + 1.6({P_ll:.2f}) = <b>{Pu:.2f} {u_force_per_len}</b>", bullet_style))
+        story.append(Paragraph(f"• Footing Width (B) = {B:.2f} {u_len} | Thickness (h) = {h_foot:.2f} {u_len} | Wall Width (b_w) = {b_wall:.2f} {u_len}", bullet_style))
 
-        story.append(Paragraph("2. Geotechnical Verification", h1_sec_style))
-        story.append(Paragraph(f"• Allowable Soil Capacity (q_allow) = {q_allow:.2f} {u_stress}", bullet_style))
-        story.append(Paragraph(f"• Service Soil Pressure = {q_service_actual:.2f} {u_stress} [{'PASS' if q_service_actual <= q_net_allow else 'FAIL'}]", bullet_style))
+        # 2. Geotechnical Verification
+        story.append(Paragraph("2. Geotechnical Bearing Capacity Checks", h1_sec_style))
+        story.append(Paragraph(f"• Soil Surcharge Pressure (q_surcharge) = {surcharge:.2f} {u_stress}", bullet_style))
+        story.append(Paragraph(f"• Net Allowable Bearing Capacity (q_net_allow) = {q_net_allow:.2f} {u_stress}", bullet_style))
+        story.append(Paragraph(f"• Actual Service Soil Pressure q_service = {P_service:.2f} / {B:.2f} = <b>{q_service_actual:.2f} {u_stress}</b>", bullet_style))
+        status_geo = "SAFE" if q_service_actual <= q_net_allow else "OVERLOADED"
+        story.append(Paragraph(f"• Geotechnical Bearing Status: <b>[{status_geo}]</b>", bullet_style))
 
-        story.append(Paragraph("3. Shear & Structural Verification", h1_sec_style))
+        # 3. Structural Shear Checks
+        story.append(Paragraph("3. One-Way Shear Verification (ACI 318)", h1_sec_style))
         math_shear = (
-            f"V<sub>u,oneway</sub> = {Vu_oneway:.2f} {u_force_per_len}<br/>"
-            f"φV<sub>c</sub> = {Phi_Vc:.2f} {u_force_per_len} [{'PASS' if Phi_Vc >= Vu_oneway else 'FAIL'}]"
+            f"Factored Pressure qu = Pu / B = {qu_factored:.2f} {u_stress}<br/>"
+            f"Cantilever Arm = (B - b_w) / 2 = {cantilever_arm:.3f} {u_len}<br/>"
+            f"Critical Section Distance = Cantilever - d = {max(0.0, crit_shear_dist):.3f} {u_len}<br/>"
+            f"Vu,oneway = {Vu_oneway:.2f} {u_force_per_len} | Shear Capacity φVc = {Phi_Vc:.2f} {u_force_per_len}"
         )
         story.append(Paragraph(math_shear, math_code_style))
+        status_shear = "PASS" if Phi_Vc >= Vu_oneway else "FAIL"
+        story.append(Paragraph(f"• One-Way Shear Status: <b>[{status_shear}]</b>", bullet_style))
 
-        story.append(Paragraph("4. Reinforcement Details", h1_sec_style))
-        story.append(Paragraph(f"• Main Transverse Rebar: <b>{selected_main_bar} @ {s_main_final} {spacing_unit} c/c</b>", bullet_style))
-        story.append(Paragraph(f"• Longitudinal Temp Rebar: <b>{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c</b>", bullet_style))
+        # 4. Flexural Design Details
+        story.append(Paragraph("4. Flexural Reinforcement Derivations", h1_sec_style))
+        math_flex = (
+            f"Factored Moment Mu = (qu * Cantilever^2) / 2 = {Mu:.2f} {u_force_per_len}*{u_len}<br/>"
+            f"Calculated Steel Ratio ρ_calc = {rho_calc:.6f}<br/>"
+            f"Minimum Steel Ratio ρ_min = max(ρ_slab, ρ_beam) = {rho_min:.6f}<br/>"
+            f"Governing Steel Ratio ρ_req = {rho_req:.6f}"
+        )
+        story.append(Paragraph(math_flex, math_code_style))
+        story.append(Paragraph(f"• Main Transverse Rebar: <b>{selected_main_bar} @ {s_main_final} {spacing_unit} c/c</b> ({hook_type})", bullet_style))
+        story.append(Paragraph(f"• Longitudinal Distribution Rebar: <b>{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c</b>", bullet_style))
 
-        story.append(Spacer(1, 10))
-        story.append(Paragraph("5. Structural Cross-Section View", h1_sec_style))
-        img_sec = RLImage(sec_buf, width=320, height=200)
-        story.append(img_sec)
+        # 5. Structural Detailing Drawings (Elevation & Plan)
+        story.append(Spacer(1, 6))
+        story.append(Paragraph("5. Structural Detailing Drawings", h1_sec_style))
+        
+        img_sec = RLImage(sec_buf, width=250, height=160)
+        img_plan = RLImage(plan_buf, width=250, height=160)
+        
+        # Display figures side by side in table
+        img_table = Table([[img_sec, img_plan]], colWidths=[260, 260])
+        img_table.setStyle([
+            ('ALIGN', (0,0), (-1,-1), 'CENTER'),
+            ('VALIGN', (0,0), (-1,-1), 'MIDDLE'),
+        ])
+        story.append(img_table)
 
         doc.build(story)
         pdf_buf.seek(0)
         return pdf_buf
 
     sec_img = draw_footing_section()
-    pdf_file = generate_pdf_report(sec_img)
+    plan_img = draw_footing_plan()
+    pdf_file = generate_pdf_report(sec_img, plan_img)
 
     with col_res:
         st.header("📊 Continuous Footing Results")
+        
         st.subheader("1. Bearing Capacity Check")
         c1, c2 = st.columns(2)
         c1.metric("Service Soil Pressure", f"{q_service_actual:.2f} {u_stress}")
@@ -325,11 +436,16 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         st.markdown(f"• **Main Steel:** **{selected_main_bar} @ {s_main_final} {spacing_unit} c/c** ({hook_type})")
         st.markdown(f"• **Temp Steel:** **{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c**")
 
-        st.image(sec_img, caption="Cross-Section Diagram")
+        st.subheader("4. Detailing & Structural Drawings")
+        tab1, tab2 = st.tabs(["Elevation Section", "Top Plan View"])
+        with tab1:
+            st.image(sec_img, caption="Footing Elevation Cross-Section Diagram")
+        with tab2:
+            st.image(plan_img, caption="Footing Structural Top Plan View")
 
         st.markdown("---")
         st.download_button(
-            label="📄 Download Calculation PDF Report",
+            label="📄 Download Comprehensive PDF Calculation Report",
             data=pdf_file,
             file_name="Continuous_Wall_Footing_Report.pdf",
             mime="application/pdf",
