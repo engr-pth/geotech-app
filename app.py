@@ -56,29 +56,37 @@ if selected == "Home":
     """)
 
 # ----------------------------------------------------
-# 2. SOIL CLASSIFICATION PAGE (UPDATED WITH PAN AUTO-FILL & EXTRA SIEVES)
+# SOIL CLASSIFICATION PAGE (DYNAMIC STANDARD-BASED GRAIN FRACTIONS)
 # ----------------------------------------------------
-elif selected == "Soil Classification":
+if selected == "Soil Classification":
     st.title("🧪 Multi-Standard Soil Classification Suite")
     st.caption("Supports USCS (ASTM D2487), AASHTO (M 145), BS 5930 / Eurocode 7, and IS 1498 (Indian Standard)")
 
     col_in, col_res = st.columns([1, 1.2])
 
     with col_in:
-        st.header("1. Grain Size Distribution Input Method")
+        st.header("1. Select Primary Classification Standard")
+        system = st.radio(
+            "Standard", 
+            ["USCS (ASTM D2487)", "AASHTO (M 145)", "BS 5930 / Eurocode", "IS 1498 (Indian Standard)"],
+            key="soil_system_choice"
+        )
+
+        st.header("2. Grain Size Distribution Input Method")
         input_method = st.radio(
             "Select Input Type",
-            ["Direct Percentages (Gravel, Sand, Silt, Clay)", "Sieve Analysis (% Passing / Retained on Sieve #)"],
+            ["Direct Percentages (Gravel, Sand, Silt, Clay)", "Sieve Analysis (% Passing / Retained)"],
             key="soil_input_method"
         )
 
         if input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
-            gravel = st.number_input("Gravel (> 4.75mm) %", 0.0, 100.0, 15.0, step=0.1)
-            sand = st.number_input("Sand (0.075mm - 4.75mm) %", 0.0, 100.0, 35.0, step=0.1)
-            silt = st.number_input("Silt (0.002mm - 0.075mm) %", 0.0, 100.0, 30.0, step=0.1)
-            clay = st.number_input("Clay (< 0.002mm) %", 0.0, 100.0, 20.0, step=0.1)
+            gravel = st.number_input("Gravel %", 0.0, 100.0, 15.0, step=0.1)
+            sand = st.number_input("Sand %", 0.0, 100.0, 35.0, step=0.1)
+            silt = st.number_input("Silt %", 0.0, 100.0, 30.0, step=0.1)
+            clay = st.number_input("Clay %", 0.0, 100.0, 20.0, step=0.1)
+            fines_total = silt + clay
         else:
-            st.markdown("Enter Sieve Analysis Data (Standard ASTM Sieves)")
+            st.markdown("Enter Sieve Analysis Data (Standard Sieves)")
             sieve_basis = st.radio("Sieve Data Format", ["% Passing", "% Retained"], horizontal=True)
             
             if sieve_basis == "% Passing":
@@ -88,10 +96,18 @@ elif selected == "Soil Classification":
                 p20 = st.number_input("Sieve #20 (0.85 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
                 p40 = st.number_input("Sieve #40 (0.425 mm) - % Passing", 0.0, 100.0, 98.0, step=0.1)
                 p100 = st.number_input("Sieve #100 (0.15 mm) - % Passing", 0.0, 100.0, 96.0, step=0.1)
-                p200 = st.number_input("Sieve #200 (0.075 mm) - % Passing", 0.0, 100.0, 95.0, step=0.1)
+                p200 = st.number_input("Sieve #200 / 0.063mm - % Passing", 0.0, 100.0, 95.0, step=0.1)
                 
-                gravel = max(0.0, 100.0 - p4)
-                sand = max(0.0, p4 - p200)
+                # Dynamic fractions calculation according to selected standard
+                if "AASHTO" in system or "BS 5930" in system:
+                    # Gravel > 2.0 mm (#10 Sieve boundary)
+                    gravel = max(0.0, 100.0 - p10)
+                    sand = max(0.0, p10 - p200)
+                else: # USCS, IS 1498
+                    # Gravel > 4.75 mm (#4 Sieve boundary)
+                    gravel = max(0.0, 100.0 - p4)
+                    sand = max(0.0, p4 - p200)
+                    
                 fines_total = max(0.0, p200)
             else:
                 r38 = st.number_input("3/8 inch (9.5 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
@@ -102,22 +118,25 @@ elif selected == "Soil Classification":
                 r100 = st.number_input("Sieve #100 (0.15 mm) - % Retained", 0.0, 100.0, 2.0, step=0.1)
                 r200 = st.number_input("Sieve #200 (0.075 mm) - % Retained", 0.0, 100.0, 1.0, step=0.1)
                 
-                # Auto-fill Pan calculation based on remaining percentage to reach 100%
                 accumulated_retained = r38 + r4 + r10 + r20 + r40 + r100 + r200
                 auto_pan = max(0.0, 100.0 - accumulated_retained)
+                r_pan = st.number_input("Pan - % Retained (Auto-filled)", 0.0, 100.0, auto_pan, step=0.1)
                 
-                r_pan = st.number_input("Pan - % Retained (Auto-filled)", 0.0, 100.0, auto_pan, step=0.1, help="Automatically calculated to make total retained 100%")
-                
-                gravel = r38 + r4
-                sand = r10 + r20 + r40 + r100 + r200
+                if "AASHTO" in system or "BS 5930" in system:
+                    gravel = r38 + r4
+                    sand = r10 + r20 + r40 + r100 + r200
+                else:
+                    gravel = r38 + r4 + r10  # Note: r10 included in sand for USCS
+                    gravel = r38 + r4
+                    sand = r10 + r20 + r40 + r100 + r200
+                    
                 fines_total = r_pan
 
-            # Hydrometer split for fines (Silt vs Clay split)
             silt_ratio = st.slider("Silt / Fines Ratio (%)", 0.0, 100.0, 60.0, step=1.0)
             silt = fines_total * (silt_ratio / 100.0)
             clay = fines_total * (1.0 - (silt_ratio / 100.0))
 
-        # Ensure exact 100% total composition without distortion
+        # Check total percentage
         if input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
             total_percent = gravel + sand + silt + clay
             if abs(total_percent - 100.0) > 0.05:
@@ -131,10 +150,9 @@ elif selected == "Soil Classification":
                 sand = (sand / total_sieve_sum) * 100.0
                 silt = (fines_total * (silt_ratio / 100.0) / total_sieve_sum) * 100.0
                 clay = (fines_total * (1.0 - (silt_ratio / 100.0)) / total_sieve_sum) * 100.0
-            fines = silt + clay
-            st.success(f"✅ Fines (< 0.075mm): `{fines_total:.1f}%` | Composition Normalized to 100%")
+            st.success(f"✅ Fines: `{fines_total:.1f}%` | Active Standard Bound Applied (`{system.split()[0]}`)")
 
-        st.header("2. Atterberg Limits (%)")
+        st.header("3. Atterberg Limits (%)")
         
         if 'll_val' not in st.session_state: st.session_state.ll_val = 45.0
         if 'pl_val' not in st.session_state: st.session_state.pl_val = 20.0
@@ -152,12 +170,9 @@ elif selected == "Soil Classification":
         
         st.info(f"**Active Atterberg Parameters:** LL = `{LL:.1f}%`, PL = `{PL:.1f}%`, PI = `{PI:.1f}%`")
         
-        st.header("3. Grain Size Parameters (Optional)")
+        st.header("4. Grain Size Parameters (Optional)")
         Cu = st.number_input("Uniformity Coefficient (Cu)", 0.0, 50.0, 4.0, step=0.1)
         Cc = st.number_input("Coefficient of Curvature (Cc)", 0.0, 10.0, 1.0, step=0.1)
-        
-        st.header("4. Select Primary Classification Standard")
-        system = st.radio("Standard", ["USCS (ASTM D2487)", "AASHTO (M 145)", "BS 5930 / Eurocode", "IS 1498 (Indian Standard)"])
 
     A_line = 0.73 * (LL - 20) if LL >= 20 else 0.0
 
@@ -236,11 +251,10 @@ elif selected == "Soil Classification":
     with col_res:
         st.header("📊 Classification Results")
         
-        fines_check = fines_total if input_method != "Direct Percentages (Gravel, Sand, Silt, Clay)" else (silt + clay)
-        uscs_res = classify_uscs(gravel, sand, fines_check, LL, PI, Cu, Cc)
-        aashto_res = classify_aashto(fines_check, LL, PI, gravel, sand)
-        bs_res = classify_bs(fines_check, LL, PI)
-        is_res = classify_is_1498(fines_check, LL, PI)
+        uscs_res = classify_uscs(gravel, sand, fines_total, LL, PI, Cu, Cc)
+        aashto_res = classify_aashto(fines_total, LL, PI, gravel, sand)
+        bs_res = classify_bs(fines_total, LL, PI)
+        is_res = classify_is_1498(fines_total, LL, PI)
         
         if "USCS" in system:
             st.success(f"**USCS Symbol:** `{uscs_res}`")
