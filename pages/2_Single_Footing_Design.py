@@ -348,21 +348,27 @@ if calc_trigger or "calculated" in st.session_state:
             ax.plot([left_x, left_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
             ax.plot([right_x, right_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
         elif "180-Degree" in hook_type:
-            r_hook = 0.04 if not is_imperial else 0.12
-            tail_len = 0.05 if not is_imperial else 0.15
+            r_hook = 0.04 if not is_imperial else 0.12  # Radius for the 180-degree bend
+            tail_len = 0.05 if not is_imperial else 0.15 # Extension tail length
 
-            # Left Hook (180-degree bend turning upwards and inwards)
-            arc_left = patches.Arc((left_x, rebar_y_xdir + r_hook), 2 * r_hook, 2 * r_hook, 
+            # --- Left Hook (U-turn bending UP and INWARDS) ---
+            # Center of arc is shifted left by r_hook so the bottom connects to left_x
+            arc_left = patches.Arc((left_x - r_hook, rebar_y_xdir + r_hook), 
+                                   2 * r_hook, 2 * r_hook, 
                                    angle=0, theta1=180, theta2=360, color="red", linewidth=2.0)
             ax.add_patch(arc_left)
-            ax.plot([left_x, left_x + tail_len], 
+            # Horizontal tail connects exactly to the top of the arc
+            ax.plot([left_x - r_hook, left_x - r_hook + tail_len], 
                     [rebar_y_xdir + 2 * r_hook, rebar_y_xdir + 2 * r_hook], color="red", linewidth=2.0)
 
-            # Right Hook (180-degree bend turning upwards and inwards)
-            arc_right = patches.Arc((right_x, rebar_y_xdir + r_hook), 2 * r_hook, 2 * r_hook, 
-                                    angle=0, theta1=180, theta2=360, color="red", linewidth=2.0)
+            # --- Right Hook (U-turn bending UP and INWARDS) ---
+            # Center of arc is shifted right by r_hook so the bottom connects to right_x
+            arc_right = patches.Arc((right_x + r_hook, rebar_y_xdir + r_hook), 
+                                    2 * r_hook, 2 * r_hook, 
+                                    angle=0, theta1=0, theta2=180, color="red", linewidth=2.0)
             ax.add_patch(arc_right)
-            ax.plot([right_x, right_x - tail_len], 
+            # Horizontal tail connects exactly to the top of the arc
+            ax.plot([right_x + r_hook, right_x + r_hook - tail_len], 
                     [rebar_y_xdir + 2 * r_hook, rebar_y_xdir + 2 * r_hook], color="red", linewidth=2.0)
 
         x_coords = np.linspace(left_x, right_x, num_bars_x)
