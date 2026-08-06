@@ -10,38 +10,30 @@ st.set_page_config(
 
 # --- Sidebar Navigation Menu ---
 with st.sidebar:
-    st.title("📌 Main Menu")
-    
-    # 1. Main Pages Menu
-    main_selection = option_menu(
-        menu_title=None,
-        options=["Home", "Soil Classification"],
-        icons=["house-fill", "journal-text"],
+    selected = option_menu(
+        menu_title="Main Menu",
+        options=[
+            "Home", 
+            "Soil Classification", 
+            "Isolated Footing", 
+            "Continuous Wall Footing"
+        ],
+        icons=[
+            "house-fill", 
+            "journal-text", 
+            "square-fill", 
+            "border-style"
+        ],
+        # Menu မှာ Sub-group စာသားပုံစံပြချင်ရင် ရိုးရှင်းစွာပဲ နာမည်တပ်နိုင်ပါတယ်
+        menu_icon="cast",
         default_index=0,
+        key="main_menu_nav" # Session state conflict မဖြစ်အောင် key သီးသန့်ပေးထားပါသည်
     )
-    
-    st.markdown("---")
-    st.subheader("🏗️ Shallow Foundation")
-    
-    # 2. Shallow Foundation Sub-menu
-    foundation_selection = option_menu(
-        menu_title=None,
-        options=["Isolated Footing", "Continuous Wall Footing"],
-        icons=["square-fill", "border-style"],
-        default_index=-1, # ဘာမှ မရွေးထားသော အနေအထား
-    )
-
-# --- Logic to Handle Active Page ---
-# ရွေးချယ်မှုအပေါ် မူတည်ပြီး ဘယ် Page ပေါ်ရမလဲ သတ်မှတ်ခြင်း
-if foundation_selection is not None:
-    page = foundation_selection
-else:
-    page = main_selection
 
 # --- Page Content Rendering ---
 
 # 1. HOME PAGE
-if page == "Home":
+if selected == "Home":
     st.title("🧱 Geotechnical Engineering Calculation Suite")
     st.markdown("""
     ဤ Web App သည် Geotechnical Engineering တွက်ချက်မှုများအတွက် Tool စုံလင်စွာ ပါဝင်သော Platform ဖြစ်ပါသည်။ 
@@ -54,7 +46,7 @@ if page == "Home":
     """)
 
 # 2. SOIL CLASSIFICATION PAGE
-elif page == "Soil Classification":
+elif selected == "Soil Classification":
     st.title("🧪 Soil Classification Tool")
     st.info("Grain size distribution နှင့် Atterberg limits များဖြင့် မြေအမျိုးအစားခွဲခြားသည့် Tool ဖြစ်ပါသည်။")
     # -------------------------------------------------------------
@@ -62,7 +54,7 @@ elif page == "Soil Classification":
     # -------------------------------------------------------------
 
 # 3. ISOLATED FOOTING DESIGN PAGE
-elif page == "Isolated Footing":
+elif selected == "Isolated Footing":
     st.title("📐 Isolated Footing Design")
     st.info("Single/Isolated RC Footing Design တွက်ချက်သည့် Tool ဖြစ်ပါသည်။")
     # -------------------------------------------------------------
@@ -70,7 +62,7 @@ elif page == "Isolated Footing":
     # -------------------------------------------------------------
 
 # 4. CONTINUOUS WALL FOOTING DESIGN PAGE
-elif page == "Continuous Wall Footing":
+elif selected == "Continuous Wall Footing":
     st.title("🧱 Continuous Wall Footing Design Suite")
     st.info("Continuous RC Wall Footing Design တွက်ချက်သည့် Tool ဖြစ်ပါသည်။")
     # -------------------------------------------------------------
