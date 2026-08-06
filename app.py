@@ -56,7 +56,7 @@ if selected == "Home":
     """)
 
 # ----------------------------------------------------
-# 2. SOIL CLASSIFICATION PAGE (CORRECTED)
+# 2. SOIL CLASSIFICATION PAGE
 # ----------------------------------------------------
 elif selected == "Soil Classification":
     st.title("🧪 Multi-Standard Soil Classification Suite")
@@ -83,22 +83,22 @@ elif selected == "Soil Classification":
             
             if sieve_basis == "% Passing":
                 p38 = st.number_input("3/8 inch (9.5 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
-                p4 = st.number_input("Sieve #4 (4.75 mm) - % Passing", 0.0, 100.0, 85.0, step=0.1)
-                p10 = st.number_input("Sieve #10 (2.0 mm) - % Passing", 0.0, 100.0, 70.0, step=0.1)
-                p40 = st.number_input("Sieve #40 (0.425 mm) - % Passing", 0.0, 100.0, 55.0, step=0.1)
-                p200 = st.number_input("Sieve #200 (0.075 mm) - % Passing", 0.0, 100.0, 50.0, step=0.1)
+                p4 = st.number_input("Sieve #4 (4.75 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
+                p10 = st.number_input("Sieve #10 (2.0 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
+                p40 = st.number_input("Sieve #40 (0.425 mm) - % Passing", 0.0, 100.0, 98.0, step=0.1)
+                p200 = st.number_input("Sieve #200 (0.075 mm) - % Passing", 0.0, 100.0, 95.0, step=0.1)
                 
-                # Corrected Composition Breakdown based on USCS definitions
+                # Corrected logic based on ASTM standards
                 gravel = max(0.0, 100.0 - p4)
                 sand = max(0.0, p4 - p200)
                 fines_total = max(0.0, p200)
             else:
                 r38 = st.number_input("3/8 inch (9.5 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
-                r4 = st.number_input("Sieve #4 (4.75 mm) - % Retained", 0.0, 100.0, 15.0, step=0.1)
-                r10 = st.number_input("Sieve #10 (2.0 mm) - % Retained", 0.0, 100.0, 15.0, step=0.1)
-                r40 = st.number_input("Sieve #40 (0.425 mm) - % Retained", 0.0, 100.0, 15.0, step=0.1)
-                r200 = st.number_input("Sieve #200 (0.075 mm) - % Retained", 0.0, 100.0, 5.0, step=0.1)
-                r_pan = st.number_input("Pan - % Retained", 0.0, 100.0, 50.0, step=0.1)
+                r4 = st.number_input("Sieve #4 (4.75 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
+                r10 = st.number_input("Sieve #10 (2.0 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
+                r40 = st.number_input("Sieve #40 (0.425 mm) - % Retained", 0.0, 100.0, 2.0, step=0.1)
+                r200 = st.number_input("Sieve #200 (0.075 mm) - % Retained", 0.0, 100.0, 3.0, step=0.1)
+                r_pan = st.number_input("Pan - % Retained", 0.0, 100.0, 95.0, step=0.1)
                 
                 gravel = r38 + r4
                 sand = r10 + r40 + r200
@@ -109,32 +109,43 @@ elif selected == "Soil Classification":
             silt = fines_total * (silt_ratio / 100.0)
             clay = fines_total * (1.0 - (silt_ratio / 100.0))
 
-        # Corrected Total Calculation (Gravel + Sand + Silt + Clay should sum up to 100%)
-        fines = silt + clay
-        total_percent = gravel + sand + silt + clay
-        
-        # Normalize if using Sieve Analysis to strictly match 100% for display breakdown if needed, 
-        # or validate direct percentages.
+        # Ensure exact 100% total composition without distortion
         if input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
+            total_percent = gravel + sand + silt + clay
             if abs(total_percent - 100.0) > 0.05:
                 st.error(f"⚠️ **Total Percentage Error:** {total_percent:.1f}% (Must equal 100%)")
             else:
-                st.success(f"✅ Total Percentage: `{total_percent:.1f}%` | **Fines (< 0.075mm):** `{fines:.1f}%`")
+                st.success(f"✅ Total Percentage: `{total_percent:.1f}%`")
         else:
-            # For Sieve Analysis, normalize components so breakdown equals 100%
-            if total_percent > 0:
-                gravel = (gravel / total_percent) * 100.0
-                sand = (sand / total_percent) * 100.0
-                silt = (silt / total_percent) * 100.0
-                clay = (clay / total_percent) * 100.0
-            total_percent = gravel + sand + silt + clay
-            st.success(f"✅ Normalized Total Percentage: `{total_percent:.1f}%` | **Fines (< 0.075mm):** `{fines:.1f}%`")
-        
+            # For Sieve analysis where fines dominate, calculate exact fractions summing to 100%
+            total_sieve_sum = gravel + sand + fines_total
+            if total_sieve_sum > 0:
+                gravel = (gravel / total_sieve_sum) * 100.0
+                sand = (sand / total_sieve_sum) * 100.0
+                silt = (fines_total * (silt_ratio / 100.0) / total_sieve_sum) * 100.0
+                clay = (fines_total * (1.0 - (silt_ratio / 100.0)) / total_sieve_sum) * 100.0
+            fines = silt + clay
+            st.success(f"✅ Fines (< 0.075mm): `{fines_total:.1f}%` | Composition Normalized to 100%")
+
         st.header("2. Atterberg Limits (%)")
-        LL = st.number_input("Liquid Limit (LL)", 0.0, 150.0, 45.0, step=0.1)
-        PL = st.number_input("Plastic Limit (PL)", 0.0, 100.0, 20.0, step=0.1)
-        PI = max(0.0, LL - PL)
-        st.info(f"**Plasticity Index (PI):** `{PI:.1f}%`")
+        
+        # Initialize session state for Atterberg limits if not present
+        if 'll_val' not in st.session_state: st.session_state.ll_val = 45.0
+        if 'pl_val' not in st.session_state: st.session_state.pl_val = 20.0
+        if 'pi_val' not in st.session_state: st.session_state.pi_val = 25.0
+
+        # Callback functions for reactive updating
+        def update_pi():
+            st.session_state.pi_val = max(0.0, st.session_state.ll_val - st.session_state.pl_val)
+
+        def update_pl_from_pi():
+            st.session_state.pl_val = max(0.0, st.session_state.ll_val - st.session_state.pi_val)
+
+        LL = st.number_input("Liquid Limit (LL)", 0.0, 150.0, key='ll_val', on_change=update_pi, step=0.1)
+        PL = st.number_input("Plastic Limit (PL)", 0.0, 100.0, key='pl_val', on_change=update_pi, step=0.1)
+        PI = st.number_input("Plasticity Index (PI)", 0.0, 100.0, key='pi_val', on_change=update_pl_from_pi, step=0.1)
+        
+        st.info(f"**Active Atterberg Parameters:** LL = `{LL:.1f}%`, PL = `{PL:.1f}%`, PI = `{PI:.1f}%`")
         
         st.header("3. Grain Size Parameters (Optional)")
         Cu = st.number_input("Uniformity Coefficient (Cu)", 0.0, 50.0, 4.0, step=0.1)
@@ -145,8 +156,8 @@ elif selected == "Soil Classification":
 
     A_line = 0.73 * (LL - 20) if LL >= 20 else 0.0
 
-    def classify_uscs(gravel, sand, fines, LL, PI, Cu, Cc):
-        if fines >= 50:
+    def classify_uscs(gravel, sand, fines_val, LL, PI, Cu, Cc):
+        if fines_val >= 50:
             if LL >= 50:
                 return "CH (High Plasticity Clay)" if PI > A_line else "MH (Elastic Silt)"
             else:
@@ -158,27 +169,27 @@ elif selected == "Soil Classification":
                     return "CL-ML (Silty Clay)"
         else:
             if gravel > sand:
-                if fines < 5:
+                if fines_val < 5:
                     return "GW (Well-graded Gravel)" if (Cu >= 4 and 1 <= Cc <= 3) else "GP (Poorly-graded Gravel)"
-                elif fines > 12:
+                elif fines_val > 12:
                     return "GC (Clayey Gravel)" if PI > A_line else "GM (Silty Gravel)"
                 else:
                     return "GW-GM / GP-GC (Gravel with Fines)"
             else:
-                if fines < 5:
+                if fines_val < 5:
                     return "SW (Well-graded Sand)" if (Cu >= 6 and 1 <= Cc <= 3) else "SP (Poorly-graded Sand)"
-                elif fines > 12:
+                elif fines_val > 12:
                     return "SC (Clayey Sand)" if PI > A_line else "SM (Silty Sand)"
                 else:
                     return "SW-SM / SP-SC (Sand with Fines)"
 
-    def classify_aashto(fines, LL, PI, gravel, sand):
-        GI = (fines - 35) * (0.2 + 0.005 * (LL - 40)) + 0.01 * (fines - 15) * (PI - 10)
+    def classify_aashto(fines_val, LL, PI, gravel, sand):
+        GI = (fines_val - 35) * (0.2 + 0.005 * (LL - 40)) + 0.01 * (fines_val - 15) * (PI - 10)
         GI = max(0, int(round(GI)))
-        if fines <= 35:
-            if fines <= 15 and PI <= 6:
+        if fines_val <= 35:
+            if fines_val <= 15 and PI <= 6:
                 group = "A-1-a" if gravel > sand else "A-1-b"
-            elif fines <= 25 and (LL == 0 or PI <= 6):
+            elif fines_val <= 25 and (LL == 0 or PI <= 6):
                 group = "A-3 (Fine Sand)"
             else:
                 if PI <= 10:
@@ -193,8 +204,8 @@ elif selected == "Soil Classification":
                 group = "A-7-5" if PI <= (LL - 30) else "A-7-6"
             return f"{group} (GI = {GI})"
 
-    def classify_bs(fines, LL, PI):
-        if fines >= 35:
+    def classify_bs(fines_val, LL, PI):
+        if fines_val >= 35:
             if LL < 35: qual = "L (Low Plasticity)"
             elif 35 <= LL < 50: qual = "I (Intermediate Plasticity)"
             elif 50 <= LL < 70: qual = "H (High Plasticity)"
@@ -206,8 +217,8 @@ elif selected == "Soil Classification":
         else:
             return "Coarse-Grained Soil (Gravel/Sand)"
 
-    def classify_is_1498(fines, LL, PI):
-        if fines >= 50:
+    def classify_is_1498(fines_val, LL, PI):
+        if fines_val >= 50:
             if LL > 50:
                 return "CH (High Plasticity Clay)" if PI > A_line else "MH (High Plasticity Silt)"
             elif 35 <= LL <= 50:
@@ -220,10 +231,11 @@ elif selected == "Soil Classification":
     with col_res:
         st.header("📊 Classification Results")
         
-        uscs_res = classify_uscs(gravel, sand, fines, LL, PI, Cu, Cc)
-        aashto_res = classify_aashto(fines, LL, PI, gravel, sand)
-        bs_res = classify_bs(fines, LL, PI)
-        is_res = classify_is_1498(fines, LL, PI)
+        fines_check = fines_total if input_method != "Direct Percentages (Gravel, Sand, Silt, Clay)" else (silt + clay)
+        uscs_res = classify_uscs(gravel, sand, fines_check, LL, PI, Cu, Cc)
+        aashto_res = classify_aashto(fines_check, LL, PI, gravel, sand)
+        bs_res = classify_bs(fines_check, LL, PI)
+        is_res = classify_is_1498(fines_check, LL, PI)
         
         if "USCS" in system:
             st.success(f"**USCS Symbol:** `{uscs_res}`")
@@ -268,7 +280,7 @@ elif selected == "Soil Classification":
         ax.plot(ll_vals, a_line_vals, color='red', linestyle='--', label="A-Line")
         ax.axvline(35, color='gray', linestyle=':', label="LL=35%")
         ax.axvline(50, color='gray', linestyle=':', label="LL=50%")
-        ax.scatter([LL], [PI], color='blue', s=80, zorder=5, label=f"Soil (LL={LL}, PI={PI})")
+        ax.scatter([LL], [PI], color='blue', s=80, zorder=5, label=f"Soil (LL={LL:.1f}, PI={PI:.1f})")
         
         ax.set_xlim(0, 100)
         ax.set_ylim(0, 60)
@@ -278,7 +290,6 @@ elif selected == "Soil Classification":
         ax.legend(loc="upper left")
         
         st.pyplot(fig)
-
 # ----------------------------------------------------
 # 3. ISOLATED FOOTING PAGE
 # ----------------------------------------------------
