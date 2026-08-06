@@ -22,15 +22,26 @@ st.set_page_config(
     layout="wide"
 )
 
-# Sidebar Menu Definition
+# Sidebar Menu Definition with Nested Navigation
 with st.sidebar:
-    selected = option_menu(
+    main_selected = option_menu(
         menu_title="Main Menu",
-        options=["Home", "Soil Classification", "Isolated Footing", "Continuous Wall Footing"],
-        icons=["house-fill", "journal-text", "square-fill", "border-style"],
+        options=["Home", "Soil Classification", "Shallow Foundation"],
+        icons=["house-fill", "journal-text", "layers-fill"],
         default_index=0,
         key="main_menu_nav"
     )
+    
+    # Shallow Foundation ကို နှိပ်မှ Sub-menu ဖွင့်မည်
+    if main_selected == "Shallow Foundation":
+        sub_selected = st.radio(
+            "📌 Select Foundation Type:",
+            ["Isolated Footing", "Continuous Wall Footing"],
+            key="sub_menu_nav"
+        )
+        selected = sub_selected
+    else:
+        selected = main_selected
 
 # ----------------------------------------------------
 # 1. HOME PAGE
@@ -42,9 +53,9 @@ if selected == "Home":
 
     👈 **ဘေးဘက် Sidebar မီနူးမှ မိမိအသုံးပြုလိုသည့် Tool ကို ရွေးချယ်ပါ:**
     * **Soil Classification:** Grain size distribution နှင့် Atterberg limits များဖြင့် မြေအမျိုးအစားခွဲရန်
-    * **Shallow Foundation Design တွက်ချက်ရန်:**
-        * **Isolated Footing Design:** Isolated Footing Design တွက်ချက်ရန်
-        * **Continuous Wall Footing Design:** Continuous Wall Footing Design တွက်ချက်ရန်
+    * **Shallow Foundation:**
+        * **Isolated Footing:** Single Column Footing Design တွက်ချက်ရန်
+        * **Continuous Wall Footing:** Continuous Wall Footing Design တွက်ချက်ရန်
     """)
 
 # ----------------------------------------------------
