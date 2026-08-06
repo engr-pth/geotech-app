@@ -228,7 +228,37 @@ if calc_trigger or "wall_calc_state" in st.session_state:
     s_main_final = int(min(s_main, min(3 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)))
     s_temp_final = int(min(s_temp, max_s_temp))
 
-    # --- Refined Hook Drawing Logic (Curved Arc 180° Hooks) ---
+    # --- Development Length Check (ACI 318 Logic) ---
+    db = main_rebar_opts[selected_main_bar]["dia"]
+    # Available length from critical section (face of wall) to edge minus cover
+    L_avail_val = cantilever_arm - cover  # in footing units (m or ft)
+
+    if not is_imperial:
+        # SI Calculation (db in mm, fc in MPa, fy in MPa, L_avail in mm)
+        L_avail_mm = L_avail_val * 1000.0
+        # Straight bar tension development length (ACI 318 simplified)
+        ld_straight = (fy / (1.1 * np.sqrt(fc))) * db
+        # Hooked bar tension development length (90 or 180 deg)
+        ld_hook = (0.24 * fy / np.sqrt(fc)) * db
+        
+        ld_req = ld_hook if "Hook" in hook_type else ld_straight
+        ld_status = L_avail_mm >= ld_req
+        u_ld = "mm"
+        L_avail_disp = L_avail_mm
+    else:
+        # FPS Calculation (db in inches, fc in psi, fy in psi, L_avail in inches)
+        L_avail_in = L_avail_val * 12.0
+        # Straight bar tension development length
+        ld_straight = (fy / (25.0 * np.sqrt(fc))) * db
+        # Hooked bar tension development length
+        ld_hook = (0.02 * fy / np.sqrt(fc)) * db
+        
+        ld_req = ld_hook if "Hook" in hook_type else ld_straight
+        ld_status = L_avail_in >= ld_req
+        u_ld = "in"
+        L_avail_disp = L_avail_in
+
+    # --- Refined Hook Drawing Logic ---
     def draw_footing_section():
         fig, ax = plt.subplots(figsize=(7, 4.5))
         f_top, f_bottom = -Df, -Df - h_foot
@@ -245,7 +275,6 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         main_y = f_bottom + cover
         left_x, right_x = -B / 2 + cover, B / 2 - cover
         
-        # Draw Main Straight Bar
         ax.plot([left_x, right_x], [main_y, main_y], color="red", linewidth=2.0, label=f"Main Bar: {selected_main_bar}")
 
         if "90-Degree" in hook_type:
@@ -257,7 +286,7 @@ if calc_trigger or "wall_calc_state" in st.session_state:
             r_hook = 0.04 if not is_imperial else 0.12
             tail_len = 0.05 if not is_imperial else 0.15
 
-            # Left Hook (Arc bending UP and INWARDS + Extension Tail)
+            # Left Hook (Arc bending UP and INWARDS)
             theta_left = np.linspace(1.5 * np.pi, 0.5 * np.pi, 30)
             x_arc_left = left_x + r_hook * np.cos(theta_left)
             y_arc_left = (main_y + r_hook) + r_hook * np.sin(theta_left)
@@ -266,7 +295,7 @@ if calc_trigger or "wall_calc_state" in st.session_state:
             ax.plot([left_x, left_x + tail_len], 
                     [main_y + 2 * r_hook, main_y + 2 * r_hook], color="red", linewidth=2.0)
 
-            # Right Hook (Arc bending UP and INWARDS + Extension Tail)
+            # Right Hook (Arc bending UP and INWARDS)
             theta_right = np.linspace(1.5 * np.pi, 0.5 * np.pi, 30)
             x_arc_right = right_x - r_hook * np.cos(theta_right)
             y_arc_right = (main_y + r_hook) + r_hook * np.sin(theta_right)
@@ -275,7 +304,6 @@ if calc_trigger or "wall_calc_state" in st.session_state:
             ax.plot([right_x, right_x - tail_len], 
                     [main_y + 2 * r_hook, main_y + 2 * r_hook], color="red", linewidth=2.0)
 
-        # Distribution Steel Dots
         dot_x_coords = np.linspace(left_x + 0.08, right_x - 0.08, 7)
         ax.scatter(dot_x_coords, [main_y + 0.03] * 7, color="darkblue", s=25, zorder=5, label=f"Temp/Shrinkage Bar: {selected_temp_bar}")
 
@@ -294,7 +322,6 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         plt.close()
         return buf
 
-    # --- Footing Top Plan Drawing Function ---
     def draw_footing_plan():
         fig, ax = plt.subplots(figsize=(6, 4.5))
         unit_len_display = 2.0 if not is_imperial else 6.0
@@ -394,8 +421,17 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         story.append(Paragraph(f"• Main Transverse Rebar: <b>{selected_main_bar} @ {s_main_final} {spacing_unit} c/c</b> ({hook_type})", bullet_style))
         story.append(Paragraph(f"• Temperature & Shrinkage Rebar: <b>{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c</b>", bullet_style))
 
+        story.append(Paragraph("5. Rebar Development Length Verification (ACI 318)", h1_sec_style))
+        math_dev = (
+            f"Available Anchorage Length (L_avail) = Cantilever - Cover = {L_avail_disp:.1f} {u_ld}<br/>"
+            f"Required Development Length (L_d / L_dh) = {ld_req:.1f} {u_ld}"
+        )
+        story.append(Paragraph(math_dev, math_code_style))
+        status_ld_str = "PASS" if ld_status else "FAIL (Hook or Larger Width Required)"
+        story.append(Paragraph(f"• Development Length Status: <b>[{status_ld_str}]</b>", bullet_style))
+
         story.append(Spacer(1, 6))
-        story.append(Paragraph("5. Structural Detailing Drawings", h1_sec_style))
+        story.append(Paragraph("6. Structural Detailing Drawings", h1_sec_style))
         
         img_sec = RLImage(sec_buf, width=250, height=160)
         img_plan = RLImage(plan_buf, width=250, height=160)
@@ -430,10 +466,17 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         st.markdown(f"• **Main Steel:** **{selected_main_bar} @ {s_main_final} {spacing_unit} c/c** ({hook_type})")
         st.markdown(f"• **Temp/Shrinkage Steel:** **{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c**")
 
-        st.subheader("4. Detailing Cross-Section Elevation View")
+        st.subheader("4. Development Length Verification ($L_d$)")
+        st.metric(
+            f"Available Length vs Req. Length ({u_ld})",
+            f"{L_avail_disp:.1f} / {ld_req:.1f} {u_ld}",
+            delta="✅ PASS (Adequate Anchorage)" if ld_status else "❌ FAIL (Provide Hook or Increase B)"
+        )
+
+        st.subheader("5. Detailing Cross-Section Elevation View")
         st.image(sec_img, caption="Footing Elevation Cross-Section Diagram", use_column_width=True)
 
-        st.subheader("5. Top Structural Plan View")
+        st.subheader("6. Top Structural Plan View")
         st.image(plan_img, caption="Footing Top Structural Plan View", use_column_width=True)
 
         st.markdown("---")
