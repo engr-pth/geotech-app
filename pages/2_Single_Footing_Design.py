@@ -348,13 +348,21 @@ if calc_trigger or "calculated" in st.session_state:
             ax.plot([left_x, left_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
             ax.plot([right_x, right_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
         elif "180-Degree" in hook_type:
-            ax.plot([left_x, left_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
-            ax.plot([left_x, left_x + 0.03], [rebar_y_xdir + hook_len, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
-            ax.plot([left_x + 0.03, left_x + 0.03], [rebar_y_xdir + hook_len, rebar_y_xdir + 0.02], color="red", linewidth=2.0)
+            r_hook = hook_len / 2.0
+            
+            # Left 180-Degree Bend Arc (U-shape bending inwards to the right)
+            arc_left = patches.Arc((left_x, rebar_y_xdir + r_hook), 2 * r_hook, 2 * r_hook, 
+                                   angle=0, theta1=180, theta2=360, color="red", linewidth=2.0)
+            ax.add_patch(arc_left)
+            ax.plot([left_x + 2 * r_hook, left_x + 2 * r_hook - 0.04], 
+                    [rebar_y_xdir + r_hook, rebar_y_xdir + r_hook], color="red", linewidth=2.0)
 
-            ax.plot([right_x, right_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
-            ax.plot([right_x, right_x - 0.03], [rebar_y_xdir + hook_len, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
-            ax.plot([right_x - 0.03, right_x - 0.03], [rebar_y_xdir + hook_len, rebar_y_xdir + 0.02], color="red", linewidth=2.0)
+            # Right 180-Degree Bend Arc (U-shape bending inwards to the left)
+            arc_right = patches.Arc((right_x, rebar_y_xdir + r_hook), 2 * r_hook, 2 * r_hook, 
+                                    angle=0, theta1=180, theta2=360, color="red", linewidth=2.0)
+            ax.add_patch(arc_right)
+            ax.plot([right_x - 2 * r_hook, right_x - 2 * r_hook + 0.04], 
+                    [rebar_y_xdir + r_hook, rebar_y_xdir + r_hook], color="red", linewidth=2.0)
 
         x_coords = np.linspace(left_x, right_x, num_bars_x)
         ax.scatter(x_coords, [rebar_y_xdir + 0.02] * num_bars_x, color="darkblue", s=15, zorder=5, label=f"y-dir: {num_bars_y} Nos")
