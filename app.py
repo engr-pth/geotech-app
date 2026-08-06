@@ -263,9 +263,17 @@ with col_res:
 **USCS Group Name:** `{uscs_name}`""")
     
     st.subheader("💡 Atterberg Indices Summary")
-    st.info(f"""
+    # State ကို သီးသန့် variable တစ်ခုအနေဖြင့် အရင်တွက်ချက်ပါ
+if LI > 1:
+    state_str = 'Liquid behavior'
+elif 0 <= LI <= 1:
+    state_str = 'Plastic behavior'
+else:
+    state_str = 'Solid/Semi-solid behavior'
+
+st.info(f"""
 * **Plasticity Index (PI):** `{PI:.1f}%`
-* **Liquidity Index (LI):** `{LI:.2f}` (State: {'Liquid behavior' if LI > 1 else 'Plastic behavior'})
+* **Liquidity Index (LI):** `{LI:.2f}` (State: {state_str})
 * **Consistency Index (CI):** `{CI:.2f}`
 """)
     
