@@ -18,7 +18,7 @@ from reportlab.platypus import (
 st.set_page_config(
     page_title="Single Footing Design Suite", page_icon="🏗️", layout="wide"
 )
-st.title("🏗️ Single Footing Design (Geotechnical & Structural) Suite")
+st.title("🏗️ Single Geotechnical & Structural Footing Design Suite")
 
 col_in, col_res = st.columns([1.1, 1.1])
 
@@ -347,24 +347,14 @@ if calc_trigger or "calculated" in st.session_state:
         if "90-Degree" in hook_type:
             ax.plot([left_x, left_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
             ax.plot([right_x, right_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
-       elif "180-Degree" in hook_type:
-            # Rebar bent in a 180-degree semi-circular arc and returning backward (U-Shape)
-            r_hook = 0.03 if not is_imperial else 0.10  # Bend radius
-            ext_len = 0.04 if not is_imperial else 0.12 # Straight extension (min 4db)
+        elif "180-Degree" in hook_type:
+            ax.plot([left_x, left_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+            ax.plot([left_x, left_x + 0.03], [rebar_y_xdir + hook_len, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+            ax.plot([left_x + 0.03, left_x + 0.03], [rebar_y_xdir + hook_len, rebar_y_xdir + 0.02], color="red", linewidth=2.0)
 
-            # Left Hook (180-degree bend curving upward & back inward)
-            theta_left = np.linspace(np.pi, 0, 30)
-            arc_left_x = left_x + r_hook - r_hook * np.cos(theta_left)
-            arc_left_y = rebar_y_xdir + r_hook * np.sin(theta_left)
-            ax.plot(arc_left_x, arc_left_y, color="red", linewidth=2.0)
-            ax.plot([left_x + 2*r_hook, left_x + 2*r_hook + ext_len], [rebar_y_xdir, rebar_y_xdir], color="red", linewidth=2.0)
-
-            # Right Hook
-            theta_right = np.linspace(0, np.pi, 30)
-            arc_right_x = right_x - r_hook + r_hook * np.cos(theta_right)
-            arc_right_y = rebar_y_xdir + r_hook * np.sin(theta_right)
-            ax.plot(arc_right_x, arc_right_y, color="red", linewidth=2.0)
-            ax.plot([right_x - 2*r_hook, right_x - 2*r_hook - ext_len], [rebar_y_xdir, rebar_y_xdir], color="red", linewidth=2.0)
+            ax.plot([right_x, right_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+            ax.plot([right_x, right_x - 0.03], [rebar_y_xdir + hook_len, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+            ax.plot([right_x - 0.03, right_x - 0.03], [rebar_y_xdir + hook_len, rebar_y_xdir + 0.02], color="red", linewidth=2.0)
 
         x_coords = np.linspace(left_x, right_x, num_bars_x)
         ax.scatter(x_coords, [rebar_y_xdir + 0.02] * num_bars_x, color="darkblue", s=15, zorder=5, label=f"y-dir: {num_bars_y} Nos")
@@ -455,7 +445,7 @@ if calc_trigger or "calculated" in st.session_state:
         story = []
 
         # Header Title
-        story.append(Paragraph("SINGLE-COLUMN FOOTING DESIGN: STRUCTURAL & GEOTECHNICAL CALCULATION REPORT", main_title_style))
+        story.append(Paragraph("STRUCTURAL & GEOTECHNICAL FOOTING DESIGN CALCULATION REPORT", main_title_style))
         story.append(Paragraph(
             f"Code Standard: <b>{aci_version}</b> | Unit System: <b>{unit_system}</b> | Clear Cover: <b>3.0 in (75 mm)</b><br/>"
             f"Reinforcement Hook Type: <b>{hook_type}</b>",
