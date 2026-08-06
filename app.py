@@ -42,6 +42,16 @@ with st.sidebar:
     else:
         selected = main_selected
 
+    if main_selected == "Deep Foundation":
+        sub_selected = st.radio(
+            "📌 Select Foundation Type:",
+            ["Bored Pile", "Jack-in Pile"],
+            key="sub_menu_nav"
+        )
+        selected = sub_selected
+    else:
+        selected = main_selected
+
 # ----------------------------------------------------
 # 1. HOME PAGE
 # ----------------------------------------------------
