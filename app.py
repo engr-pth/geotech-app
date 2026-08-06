@@ -26,7 +26,7 @@ st.set_page_config(
 with st.sidebar:
     main_selected = option_menu(
         menu_title="Main Menu",
-        options=["Home", "Soil Classification", "Shallow Foundation"],
+        options=["Home", "Soil Classification", "Shallow Foundation","Deep Foundation"],
         icons=["house-fill", "journal-text", "layers-fill"],
         default_index=0,
         key="main_menu_nav"
