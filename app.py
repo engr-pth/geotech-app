@@ -264,10 +264,10 @@ with col_res:
     
     st.subheader("💡 Atterberg Indices Summary")
     st.info(f"""
-    * **Plasticity Index (PI):** `{PI:.1f}%`
-    * **Liquidity Index (LI):** `{LI:.2f}` (State: {'Liquid behavior' if LI > 1 else ('Plastic behavior' if 0 <= LI <= 1 else 'Semi-solid state')})
-    * **Consistency Index (CI):** `{CI:.2f}`
-    """)
+* **Plasticity Index (PI):** `{PI:.1f}%`
+* **Liquidity Index (LI):** `{LI:.2f}` (State: {'Liquid behavior' if LI > 1 else 'Plastic behavior'})
+* **Consistency Index (CI):** `{CI:.2f}`
+""")
     
     st.subheader("📉 Particle Size Distribution Curve")
     fig_psd = plot_psd_curve(d_arr, p_arr)
