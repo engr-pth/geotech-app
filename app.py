@@ -12,6 +12,7 @@ from reportlab.platypus import (
     SimpleDocTemplate,
     Spacer,
     Table,
+    TableStyle,
 )
 from streamlit_option_menu import option_menu
 
@@ -22,439 +23,279 @@ st.set_page_config(
     layout="wide"
 )
 
-# Sidebar Menu Definition with Nested Navigation
-with st.sidebar:
-    main_selected = option_menu(
-        menu_title="Main Menu",
-        options=["Home", "Soil Classification", "Shallow Foundation"],
-        icons=["house-fill", "journal-text", "layers-fill"],
-        default_index=0,
-        key="main_menu_nav"
-    )
-    
-    if main_selected == "Shallow Foundation":
-        sub_selected = st.radio(
-            "📌 Select Foundation Type:",
-            ["Isolated Footing", "Continuous Wall Footing"],
-            key="sub_menu_nav"
-        )
-        selected = sub_selected
-    else:
-        selected = main_selected
-
 # ----------------------------------------------------
-# 1. HOME PAGE
+# HELPER FUNCTIONS & GEOTECHNICAL LOGIC
 # ----------------------------------------------------
-if selected == "Home":
-    st.title("🧱 Geotechnical Engineering Calculation Suite")
-    st.markdown("""
-    ဤ Web App သည် Geotechnical Engineering တွက်ချက်မှုများအတွက် Tool စုံလင်စွာ ပါဝင်သော Platform ဖြစ်ပါသည်။ 
 
-    👈 **ဘေးဘက် Sidebar မီနူးမှ မိမိအသုံးပြုလိုသည့် Tool ကို ရွေးချယ်ပါ:**
-    * **Soil Classification:** Grain size distribution (Extended Sieve & Hydrometer) နှင့် Atterberg limits များဖြင့် မြေအမျိုးအစားခွဲရန်
-    * **Shallow Foundation:** Footing Design တွက်ချက်ရန်
-    """)
-
-# ----------------------------------------------------
-# 2. SOIL CLASSIFICATION & SWCC PAGE
-# ----------------------------------------------------
-if selected == "Soil Classification":
-    st.title("🧪 Multi-Standard Soil Classification & SWCC Suite")
-    st.caption("Supports USCS (ASTM D2487), AASHTO (M 145), BS 5930 / Eurocode 7, IS 1498, and Estimation of SWCC from PSD")
-
-    col_in, col_res = st.columns([1, 1.2])
-
-    with col_in:
-        st.header("1. Select Primary Classification Standard")
-        system = st.radio(
-            "Standard", 
-            ["USCS (ASTM D2487)", "AASHTO (M 145)", "BS 5930 / Eurocode", "IS 1498 (Indian Standard)"],
-            key="soil_system_choice"
-        )
-
-        st.header("2. Grain Size Distribution Input Method")
-        input_method = st.radio(
-            "Select Input Type",
-            ["Direct Percentages (Gravel, Sand, Silt, Clay)", "Sieve Analysis (% Passing / Retained)"],
-            key="soil_input_method"
-        )
-
-        sieve_sizes = np.array([9.5, 4.75, 2.0, 0.85, 0.425, 0.15, 0.075])
-        sieve_names = ["3/8 in (9.5mm)", "#4 (4.75mm)", "#10 (2.0mm)", "#20 (0.85mm)", "#40 (0.425mm)", "#100 (0.15mm)", "#200 (0.075mm)"]
-        passing_data = []
-
-        if input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
-            gravel = st.number_input("Gravel %", 0.0, 100.0, 15.0, step=0.1)
-            sand = st.number_input("Sand %", 0.0, 100.0, 35.0, step=0.1)
-            silt = st.number_input("Silt %", 0.0, 100.0, 30.0, step=0.1)
-            clay = st.number_input("Clay %", 0.0, 100.0, 20.0, step=0.1)
-            fines_total = silt + clay
-
-            # Synthesize representative curve points for plot
-            p_38 = 100.0
-            p_4 = 100.0 - gravel
-            p_200 = fines_total
-            p_10 = p_4 - (sand * 0.3)
-            p_40 = p_4 - (sand * 0.7)
-            passing_data = [p_38, p_4, p_10, p_10 - (sand * 0.2), p_40, p_200 + (sand * 0.1), p_200]
-            silt_ratio = (silt / fines_total * 100.0) if fines_total > 0 else 50.0
-
-        else:
-            st.markdown("Enter Sieve Analysis Data (Standard Sieves)")
-            sieve_basis = st.radio("Sieve Data Format", ["% Passing", "% Retained"], horizontal=True)
-            
-            if sieve_basis == "% Passing":
-                p38 = st.number_input("3/8 inch (9.5 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
-                p4 = st.number_input("Sieve #4 (4.75 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
-                p10 = st.number_input("Sieve #10 (2.0 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
-                p20 = st.number_input("Sieve #20 (0.85 mm) - % Passing", 0.0, 100.0, 100.0, step=0.1)
-                p40 = st.number_input("Sieve #40 (0.425 mm) - % Passing", 0.0, 100.0, 98.0, step=0.1)
-                p100 = st.number_input("Sieve #100 (0.15 mm) - % Passing", 0.0, 100.0, 96.0, step=0.1)
-                p200 = st.number_input("Sieve #200 / 0.075mm - % Passing", 0.0, 100.0, 95.0, step=0.1)
-                
-                passing_data = [p38, p4, p10, p20, p40, p100, p200]
-
-                if "AASHTO" in system or "BS 5930" in system:
-                    gravel = max(0.0, 100.0 - p10)
-                    sand = max(0.0, p10 - p200)
-                else: 
-                    gravel = max(0.0, 100.0 - p4)
-                    sand = max(0.0, p4 - p200)
-                    
-                fines_total = max(0.0, p200)
-            else:
-                r38 = st.number_input("3/8 inch (9.5 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
-                r4 = st.number_input("Sieve #4 (4.75 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
-                r10 = st.number_input("Sieve #10 (2.0 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
-                r20 = st.number_input("Sieve #20 (0.85 mm) - % Retained", 0.0, 100.0, 0.0, step=0.1)
-                r40 = st.number_input("Sieve #40 (0.425 mm) - % Retained", 0.0, 100.0, 2.0, step=0.1)
-                r100 = st.number_input("Sieve #100 (0.15 mm) - % Retained", 0.0, 100.0, 2.0, step=0.1)
-                r200 = st.number_input("Sieve #200 (0.075 mm) - % Retained", 0.0, 100.0, 1.0, step=0.1)
-                
-                accumulated_retained = r38 + r4 + r10 + r20 + r40 + r100 + r200
-                auto_pan = max(0.0, 100.0 - accumulated_retained)
-                r_pan = st.number_input("Pan - % Retained (Auto-filled)", 0.0, 100.0, auto_pan, step=0.1)
-                
-                # Calculating cumulative passing
-                p38 = 100.0 - r38
-                p4 = p38 - r4
-                p10 = p4 - r10
-                p20 = p10 - r20
-                p40 = p20 - r40
-                p100 = p40 - r100
-                p200 = p100 - r200
-                passing_data = [p38, p4, p10, p20, p40, p100, p200]
-
-                if "AASHTO" in system or "BS 5930" in system:
-                    gravel = r38 + r4 + r10
-                    sand = r20 + r40 + r100 + r200
-                else:
-                    gravel = r38 + r4
-                    sand = r10 + r20 + r40 + r100 + r200
-                    
-                fines_total = r_pan
-
-            silt_ratio = st.slider("Silt / Fines Ratio (%)", 0.0, 100.0, 60.0, step=1.0)
-            silt = fines_total * (silt_ratio / 100.0)
-            clay = fines_total * (1.0 - (silt_ratio / 100.0))
-
-        # Percentage sum validation
-        if input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
-            total_percent = gravel + sand + silt + clay
-            if abs(total_percent - 100.0) > 0.05:
-                st.error(f"⚠️ **Total Percentage Error:** {total_percent:.1f}% (Must equal 100%)")
-            else:
-                st.success(f"✅ Total Percentage: `{total_percent:.1f}%`")
-        else:
-            total_sieve_sum = gravel + sand + fines_total
-            if total_sieve_sum > 0:
-                gravel = (gravel / total_sieve_sum) * 100.0
-                sand = (sand / total_sieve_sum) * 100.0
-                silt = (fines_total * (silt_ratio / 100.0) / total_sieve_sum) * 100.0
-                clay = (fines_total * (1.0 - (silt_ratio / 100.0)) / total_sieve_sum) * 100.0
-            st.success(f"✅ Fines: `{fines_total:.1f}%` | Active Standard Boundaries Applied (`{system.split()[0]}`)")
-
-        st.header("3. Atterberg Limits (%)")
-        
-        if 'll_val' not in st.session_state: st.session_state.ll_val = 45.0
-        if 'pl_val' not in st.session_state: st.session_state.pl_val = 20.0
-        if 'pi_val' not in st.session_state: st.session_state.pi_val = 25.0
-
-        def update_pi():
-            st.session_state.pi_val = max(0.0, st.session_state.ll_val - st.session_state.pl_val)
-
-        def update_pl_from_pi():
-            st.session_state.pl_val = max(0.0, st.session_state.ll_val - st.session_state.pi_val)
-
-        LL = st.number_input("Liquid Limit (LL)", 0.0, 150.0, key='ll_val', on_change=update_pi, step=0.1)
-        PL = st.number_input("Plastic Limit (PL)", 0.0, 100.0, key='pl_val', on_change=update_pi, step=0.1)
-        PI = st.number_input("Plasticity Index (PI)", 0.0, 100.0, key='pi_val', on_change=update_pl_from_pi, step=0.1)
-        
-        st.info(f"**Active Atterberg Parameters:** LL = `{LL:.1f}%`, PL = `{PL:.1f}%`, PI = `{PI:.1f}%`")
-        
-        st.header("4. Grain Size Parameters")
-        Cu = st.number_input("Uniformity Coefficient (Cu)", 0.0, 50.0, 4.0, step=0.1)
-        Cc = st.number_input("Coefficient of Curvature (Cc)", 0.0, 10.0, 1.0, step=0.1)
-
-        # ----------------------------------------------------
-        # SWCC PARAMETERS INPUT
-        # ----------------------------------------------------
-        st.header("5. SWCC Estimation Parameters")
-        enable_swcc = st.checkbox("Generate Soil-Water Characteristic Curve (SWCC)", value=True)
-        
-        if enable_swcc:
-            swcc_method = st.selectbox(
-                "Select SWCC Estimation Model",
-                ["Fredlund & Xing (1994) - Pedotransfer", "van Genuchten (1980) - Empirical Fit"]
-            )
-            e_void = st.number_input("Void Ratio (e)", 0.1, 3.0, 0.65, step=0.05)
-            theta_s = e_void / (1.0 + e_void) # Saturated volumetric water content
-            st.caption(f"Calculated Porosity / Saturated Volumetric Water Content ($\Theta_s$): `{theta_s:.3f}`")
-
+def calculate_uscs(gravel, sand, fines, LL, PI, Cu, Cc, organic=False):
+    """
+    Comprehensive USCS Classification (ASTM D2487)
+    Returns: (Symbol, Group Name)
+    """
     A_line = 0.73 * (LL - 20) if LL >= 20 else 0.0
-
-    def classify_uscs(gravel, sand, fines_val, LL, PI, Cu, Cc):
-        if fines_val >= 50:
-            if LL >= 50:
-                return "CH (High Plasticity Clay)" if PI > A_line else "MH (Elastic Silt)"
-            else:
-                if PI > A_line and PI > 7:
-                    return "CL (Lean Clay)"
-                elif PI < A_line and PI < 4:
-                    return "ML (Low Plasticity Silt)"
-                else:
-                    return "CL-ML (Silty Clay)"
+    
+    if organic:
+        if LL >= 50:
+            return "OH", "Organic clay / Organic silt of high plasticity"
         else:
-            if gravel > sand:
-                if fines_val < 5:
-                    return "GW (Well-graded Gravel)" if (Cu >= 4 and 1 <= Cc <= 3) else "GP (Poorly-graded Gravel)"
-                elif fines_val > 12:
-                    return "GC (Clayey Gravel)" if PI > A_line else "GM (Silty Gravel)"
-                else:
-                    return "GW-GM / GP-GC (Gravel with Fines)"
-            else:
-                if fines_val < 5:
-                    return "SW (Well-graded Sand)" if (Cu >= 6 and 1 <= Cc <= 3) else "SP (Poorly-graded Sand)"
-                elif fines_val > 12:
-                    return "SC (Clayey Sand)" if PI > A_line else "SM (Silty Sand)"
-                else:
-                    return "SW-SM / SP-SC (Sand with Fines)"
-
-    def classify_aashto(fines_val, LL, PI, gravel, sand):
-        GI = (fines_val - 35) * (0.2 + 0.005 * (LL - 40)) + 0.01 * (fines_val - 15) * (PI - 10)
-        GI = max(0, int(round(GI)))
-        if fines_val <= 35:
-            if fines_val <= 15 and PI <= 6:
-                group = "A-1-a" if gravel > sand else "A-1-b"
-            elif fines_val <= 25 and (LL == 0 or PI <= 6):
-                group = "A-3 (Fine Sand)"
-            else:
-                if PI <= 10:
-                    group = "A-2-4" if LL <= 40 else "A-2-5"
-                else:
-                    group = "A-2-6" if LL <= 40 else "A-2-7"
-            return f"{group} (GI = 0)"
-        else:
-            if LL <= 40:
-                group = "A-4" if PI <= 10 else "A-6"
-            else:
-                group = "A-7-5" if PI <= (LL - 30) else "A-7-6"
-            return f"{group} (GI = {GI})"
-
-    def classify_bs(fines_val, LL, PI):
-        if fines_val >= 35:
-            if LL < 35: qual = "L (Low Plasticity)"
-            elif 35 <= LL < 50: qual = "I (Intermediate Plasticity)"
-            elif 50 <= LL < 70: qual = "H (High Plasticity)"
-            elif 70 <= LL < 90: qual = "V (Very High Plasticity)"
-            else: qual = "E (Extremely High Plasticity)"
+            return "OL", "Organic clay / Organic silt of low plasticity"
             
-            soil_type = "Clay (C)" if PI > A_line else "Silt (M)"
-            return f"{soil_type} - {qual}"
-        else:
-            return "Coarse-Grained Soil (Gravel/Sand)"
-
-    def classify_is_1498(fines_val, LL, PI):
-        if fines_val >= 50:
-            if LL > 50:
-                return "CH (High Plasticity Clay)" if PI > A_line else "MH (High Plasticity Silt)"
-            elif 35 <= LL <= 50:
-                return "CI (Intermediate Plasticity Clay)" if PI > A_line else "MI (Intermediate Plasticity Silt)"
+    # Fine-Grained Soil (>= 50% passing No. 200)
+    if fines >= 50:
+        if LL >= 50:
+            if PI > A_line:
+                symbol = "CH"
+                name = "Fat clay"
             else:
-                return "CL (Low Plasticity Clay)" if PI > A_line else "ML (Low Plasticity Silt)"
+                symbol = "MH"
+                name = "Elastic silt"
         else:
-            return "Coarse-Grained Soil (Gravel/Sand)"
-
-    with col_res:
-        st.header("📊 Classification Results")
-        
-        uscs_res = classify_uscs(gravel, sand, fines_total, LL, PI, Cu, Cc)
-        aashto_res = classify_aashto(fines_total, LL, PI, gravel, sand)
-        bs_res = classify_bs(fines_total, LL, PI)
-        is_res = classify_is_1498(fines_total, LL, PI)
-        
-        if "USCS" in system:
-            st.success(f"**USCS Symbol:** `{uscs_res}`")
-        elif "AASHTO" in system:
-            st.success(f"**AASHTO Group:** `{aashto_res}`")
-        elif "BS 5930" in system:
-            st.success(f"**BS 5930 Standard:** `{bs_res}`")
-        else:
-            st.success(f"**IS 1498 Symbol:** `{is_res}`")
-            
-        st.markdown("---")
-        st.subheader("🔄 Cross-Standard Comparison")
-        st.json({
-            "USCS (ASTM D2487)": uscs_res,
-            "AASHTO (Highway)": aashto_res,
-            "BS 5930 (British/Euro)": bs_res,
-            "IS 1498 (Indian Standard)": is_res
-        })
-        
-        # Grain Size Distribution Curve (Gradation Curve)
-        st.subheader("📉 Grain Size Distribution Curve")
-        fig_gsd, ax_gsd = plt.subplots(figsize=(7, 4.0))
-        
-        # Extended Points for smooth Curve Display
-        d_extended = np.array([100.0, 75.0] + list(sieve_sizes) + [0.005, 0.001])
-        p_extended = np.array([100.0, 100.0] + list(passing_data) + [clay, 0.0])
-        
-        ax_gsd.plot(d_extended, p_extended, color='#1e88e5', linewidth=2.5, marker='o', markersize=5, label="Soil Sample")
-        
-        # Particle boundary lines (Standard Geotechnical Grain Size Divisions)
-        ax_gsd.axvline(4.75, color='gray', linestyle='--', alpha=0.6)
-        ax_gsd.axvline(0.075, color='gray', linestyle='--', alpha=0.6)
-        ax_gsd.axvline(0.002, color='gray', linestyle='--', alpha=0.6)
-        
-        # Boundary Annotations
-        ax_gsd.text(15, 102, "Gravel", fontsize=8, ha='center', fontweight='bold', color='#555555')
-        ax_gsd.text(0.6, 102, "Sand", fontsize=8, ha='center', fontweight='bold', color='#555555')
-        ax_gsd.text(0.012, 102, "Silt", fontsize=8, ha='center', fontweight='bold', color='#555555')
-        ax_gsd.text(0.001, 102, "Clay", fontsize=8, ha='center', fontweight='bold', color='#555555')
-
-        ax_gsd.set_xscale('log')
-        ax_gsd.set_xlim(100.0, 0.0005)  # Reverse x-axis log scale as per Geotechnical Standard
-        ax_gsd.set_ylim(0, 105)
-        ax_gsd.set_xlabel("Particle Diameter - d (mm) [Log Scale]", fontsize=9)
-        ax_gsd.set_ylabel("Percent Passing (%)", fontsize=9)
-        ax_gsd.grid(True, which="both", linestyle=':', alpha=0.6)
-        ax_gsd.legend(loc="lower left", fontsize=8)
-        plt.tight_layout()
-        st.pyplot(fig_gsd)
-
-        # Stacked Bar Chart Display
-        st.subheader("🧱 Soil Composition Breakdown")
-        fig_bar, ax_bar = plt.subplots(figsize=(7, 1.8))
-        components = ['Gravel', 'Sand', 'Silt', 'Clay']
-        values = [gravel, sand, silt, clay]
-        colors_list = ['#8d6e63', '#d4e157', '#4fc3f7', '#e57373']
-        
-        left = 0
-        for comp, val, col in zip(components, values, colors_list):
-            if val > 0:
-                ax_bar.barh('Composition', val, left=left, color=col, label=f"{comp}: {val:.1f}%")
-                if val >= 8.0:
-                    ax_bar.text(left + val/2, 0, f"{val:.1f}%", ha='center', va='center', color='white', fontweight='bold', fontsize=9)
-                left += val
+            if PI > A_line and PI > 7:
+                symbol = "CL"
+                name = "Lean clay"
+            elif PI < A_line or PI < 4:
+                symbol = "ML"
+                name = "Silt"
+            else:
+                symbol = "CL-ML"
+                name = "Silty clay"
                 
-        ax_bar.set_xlim(0, 100)
-        ax_bar.axis('off')
-        ax_bar.legend(loc='upper center', bbox_to_anchor=(0.5, -0.3), ncol=4, frameon=False, fontsize=8.5)
-        plt.tight_layout()
-        st.pyplot(fig_bar)
-
-        st.subheader("📈 Casagrande Plasticity Chart")
-        fig, ax = plt.subplots(figsize=(6, 3.2))
-        ll_vals = np.linspace(0, 100, 100)
-        a_line_vals = 0.73 * (ll_vals - 20)
-        
-        ax.plot(ll_vals, a_line_vals, color='red', linestyle='--', label="A-Line")
-        ax.axvline(35, color='gray', linestyle=':', label="LL=35%")
-        ax.axvline(50, color='gray', linestyle=':', label="LL=50%")
-        ax.scatter([LL], [PI], color='blue', s=80, zorder=5, label=f"Soil (LL={LL:.1f}, PI={PI:.1f})")
-        
-        ax.set_xlim(0, 100)
-        ax.set_ylim(0, 60)
-        ax.set_xlabel("Liquid Limit (LL %)")
-        ax.set_ylabel("Plasticity Index (PI %)")
-        ax.grid(True, linestyle=':', alpha=0.6)
-        ax.legend(loc="upper left", fontsize=8)
-        plt.tight_layout()
-        st.pyplot(fig)
-
-        # ----------------------------------------------------
-        # SWCC GENERATION & DISPLAY SECTION
-        # ----------------------------------------------------
-        if enable_swcc:
-            st.markdown("---")
-            st.subheader("💧 Soil-Water Characteristic Curve (SWCC)")
-            st.caption("Estimated from Grain Size Distribution & Volumetric Properties")
-
-            # Suction range in kPa (0.01 kPa to 1,000,000 kPa)
-            psi = np.logspace(-2, 6, 200)
-
-            # Estimating parameters based on Soil Fine Content & Clay Content
-            # d30, d60 estimating or using empirical fit parameters based on clay/fines
-            if clay > 40:
-                # High Clay content (High AEV, gradual desaturation)
-                a_param = 300.0  # Air-entry related parameter (kPa)
-                n_param = 1.2    # Pore size distribution parameter
-                m_param = 0.8    # Curve asymmetry parameter
-                theta_r = 0.08   # Residual water content
-            elif fines_total > 50:
-                # Silt/Fine Soil
-                a_param = 50.0
-                n_param = 1.5
-                m_param = 0.9
-                theta_r = 0.04
-            elif sand > 50:
-                # Sandy Soil (Low AEV, sharp desaturation)
-                a_param = 5.0
-                n_param = 3.0
-                m_param = 1.2
-                theta_r = 0.02
+        # Modifiers for Coarse fractions in fine soil
+        coarse = gravel + sand
+        if coarse >= 30:
+            if gravel > sand:
+                name += " with gravel"
             else:
-                # Gravelly / Mixed Soil
-                a_param = 10.0
-                n_param = 2.0
-                m_param = 1.0
-                theta_r = 0.01
-
-            if "Fredlund & Xing" in swcc_method:
-                # C(psi) Correction function
-                C_psi = 1 - (np.log(1 + psi / 3000) / np.log(1 + 1e6 / 3000))
-                # Fredlund & Xing Equation
-                theta_w = C_psi * (theta_s / np.power(np.log(np.e + np.power(psi / a_param, n_param)), m_param))
+                name += " with sand"
+        elif 15 <= coarse < 30:
+            if gravel > sand:
+                name += " with gravel"
             else:
-                # van Genuchten Model
-                m_vg = 1 - (1 / n_param) if n_param > 1 else 0.5
-                alpha_vg = 1.0 / a_param
-                theta_w = theta_r + (theta_s - theta_r) / np.power(1 + np.power(alpha_vg * psi, n_param), m_vg)
+                name += " with sand"
+        return symbol, name
 
-            fig_swcc, ax_swcc = plt.subplots(figsize=(7, 4.0))
-            ax_swcc.plot(psi, theta_w, color='#00897b', linewidth=2.5, label=f"Predicted SWCC ({swcc_method.split()[0]})")
-            
-            ax_swcc.set_xscale('log')
-            ax_swcc.set_xlim(0.01, 1000000)
-            ax_swcc.set_ylim(0, theta_s * 1.1)
-            ax_swcc.set_xlabel("Matric Suction - $\psi$ (kPa) [Log Scale]", fontsize=9)
-            ax_swcc.set_ylabel("Volumetric Water Content - $\Theta$ ($m^3/m^3$)", fontsize=9)
-            ax_swcc.grid(True, which="both", linestyle=':', alpha=0.6)
-            
-            # Annotate Air Entry Value (AEV) Estimation
-            ax_swcc.axvline(a_param, color='orange', linestyle='--', alpha=0.7, label=f"Est. Air Entry Value ≈ {a_param:.1f} kPa")
-            ax_swcc.legend(loc="upper right", fontsize=8)
-            plt.tight_layout()
-            
-            st.pyplot(fig_swcc)
+    # Coarse-Grained Soil (< 50% passing No. 200)
+    else:
+        if gravel > sand:
+            # Gravels
+            if fines < 5:
+                well_graded = (Cu >= 4) and (1 <= Cc <= 3)
+                if well_graded:
+                    return "GW", "Well-graded gravel"
+                else:
+                    return "GP", "Poorly graded gravel"
+            elif fines > 12:
+                if PI > A_line and PI > 7:
+                    return "GC", "Clayey gravel"
+                elif PI < A_line or PI < 4:
+                    return "GM", "Silty gravel"
+                else:
+                    return "GC-GM", "Silty clayey gravel"
+            else: # Dual Symbol (5% to 12% fines)
+                well_graded = (Cu >= 4) and (1 <= Cc <= 3)
+                prefix = "GW" if well_graded else "GP"
+                suffix = "GC" if (PI > A_line and PI > 4) else "GM"
+                return f"{prefix}-{suffix}", f"Gravel with silt/clay ({prefix}-{suffix})"
+        else:
+            # Sands
+            if fines < 5:
+                well_graded = (Cu >= 6) and (1 <= Cc <= 3)
+                if well_graded:
+                    return "SW", "Well-graded sand"
+                else:
+                    return "SP", "Poorly graded sand"
+            elif fines > 12:
+                if PI > A_line and PI > 7:
+                    return "SC", "Clayey sand"
+                elif PI < A_line or PI < 4:
+                    return "SM", "Silty sand"
+                else:
+                    return "SC-SM", "Silty clayey sand"
+            else: # Dual Symbol (5% to 12% fines)
+                well_graded = (Cu >= 6) and (1 <= Cc <= 3)
+                prefix = "SW" if well_graded else "SP"
+                suffix = "SC" if (PI > A_line and PI > 4) else "SM"
+                return f"{prefix}-{suffix}", f"Sand with silt/clay ({prefix}-{suffix})"
 
-            st.info(f"""
-            📌 **Estimated SWCC Parameters Summary:**
-            * **Air-Entry Value (AEV) Parameter ($a$):** `{a_param:.1f} kPa`
-            * **Desaturation Rate Parameter ($n$):** `{n_param:.2f}`
-            * **Saturated Volumetric Water Content ($\Theta_s$):** `{theta_s:.3f}`
-            * **Residual Water Content ($\Theta_r$):** `{theta_r:.3f}`
-            """)
+
+def plot_plasticity_chart(LL, PI):
+    fig, ax = plt.subplots(figsize=(6.5, 3.8))
+    ll_vals = np.linspace(0, 100, 200)
+    a_line = 0.73 * (ll_vals - 20)
+    u_line = 0.9 * (ll_vals - 8)
+    
+    # Plot Boundaries
+    ax.plot(ll_vals, a_line, color='darkred', linestyle='-', linewidth=1.5, label="A-Line [PI = 0.73(LL-20)]")
+    ax.plot(ll_vals, u_line, color='black', linestyle=':', linewidth=1.0, label="U-Line [PI = 0.9(LL-8)]")
+    ax.axvline(50, color='gray', linestyle='--', alpha=0.7, label="LL = 50%")
+    
+    # Hatch / Zone fills
+    ax.fill_between(ll_vals[ll_vals>=20], a_line[ll_vals>=20], 60, where=(ll_vals[ll_vals>=20]>=50), color='#ef9a9a', alpha=0.3, label="CH / OH")
+    ax.fill_between(ll_vals, 0, a_line, where=(ll_vals>=50), color='#ffe082', alpha=0.3, label="MH / OH")
+    ax.fill_between(ll_vals[(ll_vals>=15.7) & (ll_vals<50)], a_line[(ll_vals>=15.7) & (ll_vals<50)], 60, color='#90caf9', alpha=0.3, label="CL")
+    ax.fill_between(ll_vals[ll_vals<50], 0, a_line[ll_vals<50], where=(ll_vals[ll_vals<50]<50), color='#a5d6a7', alpha=0.3, label="ML")
+    
+    # Soil Data Point
+    ax.scatter([LL], [PI], color='blue', s=100, zorder=6, edgecolor='black', label=f"Soil Sample (LL={LL:.1f}, PI={PI:.1f})")
+    
+    ax.set_xlim(0, 100)
+    ax.set_ylim(0, 60)
+    ax.set_xlabel("Liquid Limit, LL (%)", fontsize=9, fontweight='bold')
+    ax.set_ylabel("Plasticity Index, PI (%)", fontsize=9, fontweight='bold')
+    ax.grid(True, linestyle=':', alpha=0.6)
+    ax.legend(loc="upper left", fontsize=7.5, frameon=True)
+    plt.tight_layout()
+    return fig
+
+
+def plot_psd_curve(diameters, passing_percents):
+    fig, ax = plt.subplots(figsize=(7, 4.0))
+    
+    ax.plot(diameters, passing_percents, color='#1565c0', linewidth=2.2, marker='o', markersize=4, label="Particle Size Distribution")
+    
+    # Boundaries
+    ax.axvline(75.0, color='gray', linestyle='--', alpha=0.5)
+    ax.axvline(4.75, color='gray', linestyle='--', alpha=0.5)
+    ax.axvline(0.075, color='gray', linestyle='--', alpha=0.5)
+    ax.axvline(0.002, color='gray', linestyle='--', alpha=0.5)
+    
+    # Labels
+    ax.text(100, 102, "Cobbles", fontsize=7.5, ha='center', fontweight='bold', color='#424242')
+    ax.text(15, 102, "Gravel", fontsize=7.5, ha='center', fontweight='bold', color='#424242')
+    ax.text(0.6, 102, "Sand", fontsize=7.5, ha='center', fontweight='bold', color='#424242')
+    ax.text(0.015, 102, "Silt", fontsize=7.5, ha='center', fontweight='bold', color='#424242')
+    ax.text(0.001, 102, "Clay", fontsize=7.5, ha='center', fontweight='bold', color='#424242')
+
+    ax.set_xscale('log')
+    ax.set_xlim(100.0, 0.0005)
+    ax.set_ylim(0, 105)
+    ax.set_xlabel("Particle Diameter - d (mm) [Log Scale]", fontsize=9, fontweight='bold')
+    ax.set_ylabel("Percent Passing (%)", fontsize=9, fontweight='bold')
+    ax.grid(True, which="both", linestyle=':', alpha=0.6)
+    ax.legend(loc="lower left", fontsize=8)
+    plt.tight_layout()
+    return fig
+
+
+# ----------------------------------------------------
+# MAIN UI STREAMLIT APP
+# ----------------------------------------------------
+
+st.title("🧪 Advanced Multi-Standard Soil Classification Suite")
+st.caption("Includes Hydrometer Integration, USCS (ASTM D2487), Plasticity Indexes, Extended PSD & SWCC Curve")
+
+col_in, col_res = st.columns([1.1, 1.2])
+
+with col_in:
+    st.header("1. Classification Standard")
+    system = st.radio(
+        "Standard System", 
+        ["USCS (ASTM D2487)", "AASHTO (M 145)", "BS 5930 / Eurocode 7"],
+        key="soil_system_choice"
+    )
+
+    st.header("2. Grain Size Analysis Input Method")
+    input_method = st.radio(
+        "Data Source",
+        ["Direct Percentages (Gravel, Sand, Silt, Clay)", "Combined Sieve & Hydrometer Data"],
+        key="soil_input_method"
+    )
+
+    if input_method == "Direct Percentages (Gravel, Sand, Silt, Clay)":
+        gravel = st.number_input("Gravel % (> 4.75mm)", 0.0, 100.0, 15.0, step=0.1)
+        sand = st.number_input("Sand % (0.075 - 4.75mm)", 0.0, 100.0, 35.0, step=0.1)
+        silt = st.number_input("Silt % (0.002 - 0.075mm)", 0.0, 100.0, 30.0, step=0.1)
+        clay = st.number_input("Clay % (< 0.002mm)", 0.0, 100.0, 20.0, step=0.1)
+        fines_total = silt + clay
+        
+        d_arr = np.array([75.0, 19.0, 4.75, 2.0, 0.425, 0.075, 0.02, 0.005, 0.001])
+        p_arr = np.array([100.0, 100.0 - gravel*0.3, 100.0 - gravel, 100.0 - gravel - sand*0.3, 100.0 - gravel - sand*0.7, fines_total, clay + silt*0.5, clay, 0.0])
+
+    else:
+        st.subheader("Sieve & Hydrometer Testing Data")
+        st.caption("Enter Percent Passing for Standard Sizes")
+        
+        p_3in = st.number_input("3 in (75 mm) % Passing", 0.0, 100.0, 100.0)
+        p_no4 = st.number_input("No. 4 (4.75 mm) % Passing", 0.0, 100.0, 85.0)
+        p_no10 = st.number_input("No. 10 (2.0 mm) % Passing", 0.0, 100.0, 75.0)
+        p_no40 = st.number_input("No. 40 (0.425 mm) % Passing", 0.0, 100.0, 60.0)
+        p_no200 = st.number_input("No. 200 (0.075 mm) % Passing", 0.0, 100.0, 40.0)
+        
+        st.markdown("**Hydrometer Data Points (Fines):**")
+        p_02 = st.number_input("D = 0.02 mm % Passing", 0.0, 100.0, 28.0)
+        p_005 = st.number_input("D = 0.005 mm % Passing", 0.0, 100.0, 18.0)
+        p_002 = st.number_input("D = 0.002 mm % Passing (Clay Fraction)", 0.0, 100.0, 12.0)
+        
+        d_arr = np.array([75.0, 4.75, 2.0, 0.425, 0.075, 0.02, 0.005, 0.002])
+        p_arr = np.array([p_3in, p_no4, p_no10, p_no40, p_no200, p_02, p_005, p_002])
+        
+        gravel = 100.0 - p_no4
+        sand = p_no4 - p_no200
+        fines_total = p_no200
+        silt = fines_total - p_002
+        clay = p_002
+
+    st.header("3. Atterberg Limits & Moisture Content")
+    col_a1, col_a2, col_a3 = st.columns(3)
+    LL = col_a1.number_input("Liquid Limit (LL)", 0.0, 150.0, 42.0)
+    PL = col_a2.number_input("Plastic Limit (PL)", 0.0, 100.0, 20.0)
+    w_nat = col_a3.number_input("In-situ Water Content (w %)", 0.0, 150.0, 25.0)
+    
+    PI = max(0.0, LL - PL)
+    LI = (w_nat - PL) / PI if PI > 0 else 0.0
+    CI = (LL - w_nat) / PI if PI > 0 else 0.0
+    
+    is_organic = st.checkbox("Is Organic Soil? (Based on Odor/Color/Oven Dry Test)", value=False)
+
+    st.header("4. Gradation Coefficients")
+    col_c1, col_c2 = st.columns(2)
+    Cu = col_c1.number_input("Uniformity Coef. (Cu = D60/D10)", 0.0, 100.0, 5.0)
+    Cc = col_c2.number_input("Curvature Coef. (Cc = D30^2 / D10*D60)", 0.0, 10.0, 1.2)
+
+
+with col_res:
+    st.header("📊 Soil Classification Results")
+    
+    uscs_sym, uscs_name = calculate_uscs(gravel, sand, fines_total, LL, PI, Cu, Cc, is_organic)
+    
+    st.success(f"**USCS Symbol:** `{uscs_sym}`
+
+**USCS Group Name:** `{uscs_name}`")
+    
+    st.subheader("💡 Atterberg Indices Summary")
+    st.info(f"""
+    * **Plasticity Index (PI):** `{PI:.1f}%`
+    * **Liquidity Index (LI):** `{LI:.2f}` (State: {'Liquid behavior' if LI > 1 else ('Plastic behavior' if 0 <= LI <= 1 else 'Semi-solid state')})
+    * **Consistency Index (CI):** `{CI:.2f}`
+    """)
+    
+    st.subheader("📉 Particle Size Distribution Curve")
+    fig_psd = plot_psd_curve(d_arr, p_arr)
+    st.pyplot(fig_psd)
+    
+    st.subheader("📈 Plasticity Chart (ASTM D2487)")
+    fig_plast = plot_plasticity_chart(LL, PI)
+    st.pyplot(fig_plast)
+    
+    st.subheader("🧱 Composition Breakdown")
+    fig_bar, ax_bar = plt.subplots(figsize=(7, 1.5))
+    comps = ['Gravel', 'Sand', 'Silt', 'Clay']
+    vals = [gravel, sand, silt, clay]
+    clrs = ['#8d6e63', '#d4e157', '#4fc3f7', '#e57373']
+    
+    left = 0
+    for c, v, color in zip(comps, vals, clrs):
+        if v > 0:
+            ax_bar.barh('Soil Composition', v, left=left, color=color, label=f"{c}: {v:.1f}%")
+            if v >= 7.0:
+                ax_bar.text(left + v/2, 0, f"{v:.1f}%", ha='center', va='center', color='white', fontweight='bold', fontsize=8)
+            left += v
+            
+    ax_bar.set_xlim(0, 100)
+    ax_bar.axis('off')
+    ax_bar.legend(loc='upper center', bbox_to_anchor=(0.5, -0.2), ncol=4, frameon=False, fontsize=8)
+    plt.tight_layout()
+    st.pyplot(fig_bar)
 
 # ----------------------------------------------------
 # 3. ISOLATED FOOTING PAGE
