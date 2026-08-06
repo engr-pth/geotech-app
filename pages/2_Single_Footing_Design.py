@@ -344,14 +344,18 @@ if calc_trigger or "calculated" in st.session_state:
         ax.plot([left_x, right_x], [rebar_y_xdir, rebar_y_xdir], color="red", linewidth=2.0, label=f"x-dir: {num_bars_x}-{selected_rebar}")
 
         hook_len = 0.12 if not is_imperial else 0.4
+        # Rebar Hook Drawing Logic
         if "90-Degree" in hook_type:
-        # 90-degree code...
-        pass
-    elif "180-Degree" in hook_type:
-        r_hook = 0.04 if not is_imperial else 0.12
-        tail_len = 0.05 if not is_imperial else 0.15
+        # Vertical legs for 90-degree standard hooks
+        hook_len = 0.1 if not is_imperial else 0.3
+        ax.plot([left_x, left_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
+        ax.plot([right_x, right_x], [rebar_y_xdir, rebar_y_xdir + hook_len], color="red", linewidth=2.0)
 
-        # Left Hook (Arc + Extension Tail)
+        elif "180-Degree" in hook_type:
+        r_hook = 0.04 if not is_imperial else 0.12  # Radius of bend
+        tail_len = 0.05 if not is_imperial else 0.15 # Extension tail length
+
+        # Left Hook (Arc bending UP and INWARDS + Extension Tail)
         theta_left = np.linspace(1.5 * np.pi, 0.5 * np.pi, 30)
         x_arc_left = left_x + r_hook * np.cos(theta_left)
         y_arc_left = (rebar_y_xdir + r_hook) + r_hook * np.sin(theta_left)
@@ -360,6 +364,18 @@ if calc_trigger or "calculated" in st.session_state:
         ax.plot([left_x, left_x + tail_len], 
                 [rebar_y_xdir + 2 * r_hook, rebar_y_xdir + 2 * r_hook], color="red", linewidth=2.0)
 
+        # Right Hook (Arc bending UP and INWARDS + Extension Tail)
+        theta_right = np.linspace(-0.5 * np.pi, 0.5 * np.pi, 30)
+        x_arc_right = right_x + r_hook * np.cos(theta_right)
+        y_arc_right = (rebar_y_xdir + r_hook) + r_hook * np.sin(theta_right)
+
+        ax.plot(x_arc_right, y_arc_right, color="red", linewidth=2.0)
+        ax.plot([right_x, right_x - tail_len], 
+                [rebar_y_xdir + 2 * r_hook, rebar_y_xdir + 2 * r_hook], color="red", linewidth=2.0)
+
+    else:
+        # None or Straight Bars (No hook required)
+        pass
         # Right Hook (Arc + Extension Tail)
         theta_right = np.linspace(-0.5 * np.pi, 0.5 * np.pi, 30)
         x_arc_right = right_x + r_hook * np.cos(theta_right)
