@@ -195,38 +195,43 @@ if calc_trigger or "wall_calc_state" in st.session_state:
 
     if not is_imperial:
         b_mm, d_mm_val = 1000.0, d_eff * 1000.0
+        h_mm_val = h_foot * 1000.0
         Mu_Nmm = Mu * 1e6 * (9.81 if is_ton else 1.0)
         Rn = Mu_Nmm / (0.9 * b_mm * (d_mm_val**2))
         rho_calc = (0.85 * fc / fy) * (1.0 - np.sqrt(max(0.0, 1.0 - (2.0 * Rn) / (0.85 * fc))))
         
-        # Temperature and Shrinkage Steel Ratio Only (0.0018)
         rho_min = 0.0018
         rho_req = max(rho_calc, rho_min)
         
         As_main_req = rho_req * b_mm * d_mm_val
-        As_temp_req = 0.0018 * b_mm * (h_foot * 1000.0)
+        # Temperature & Shrinkage Rebar required per meter width (using total h)
+        As_temp_req = 0.0018 * b_mm * h_mm_val
         spacing_unit = "mm"
     else:
         b_in, d_in_val = 12.0, d_eff * 12.0
+        h_in_val = h_foot * 12.0
         Mu_inlbs = Mu * 12000.0 * (2.0 if is_ton else 1.0)
         Rn = Mu_inlbs / (0.9 * b_in * (d_in_val**2))
         rho_calc = (0.85 * fc / fy) * (1.0 - np.sqrt(max(0.0, 1.0 - (2.0 * Rn) / (0.85 * fc))))
         
-        # Temperature and Shrinkage Steel Ratio Only (0.0018)
         rho_min = 0.0018
         rho_req = max(rho_calc, rho_min)
         
         As_main_req = rho_req * b_in * d_in_val
-        As_temp_req = 0.0018 * b_in * (h_foot * 12.0)
+        # Temperature & Shrinkage Rebar required per foot width (using total h)
+        As_temp_req = 0.0018 * b_in * h_in_val
         spacing_unit = "in"
 
     s_main = (main_rebar_opts[selected_main_bar]["area"] / As_main_req) * (1000.0 if not is_imperial else 12.0)
     s_temp = (temp_rebar_opts[selected_temp_bar]["area"] / As_temp_req) * (1000.0 if not is_imperial else 12.0)
 
-    s_main_final = int(min(s_main, min(3 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)))
-    s_temp_final = int(min(s_temp, min(5 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)))
+    # Max Spacing Verification for T&S Rebar: min(5h, 450 mm / 18 in)
+    max_s_temp = min(5 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)
 
-    # --- Corrected 180-degree Hook Elevation Section ---
+    s_main_final = int(min(s_main, min(3 * h_foot * (1000.0 if not is_imperial else 12.0), 450.0 if not is_imperial else 18.0)))
+    s_temp_final = int(min(s_temp, max_s_temp))
+
+    # --- 180-degree Hook Elevation Drawing ---
     def draw_footing_section():
         fig, ax = plt.subplots(figsize=(7, 4.5))
         f_top, f_bottom = -Df, -Df - h_foot
@@ -243,7 +248,6 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         main_y = f_bottom + cover
         left_x, right_x = -B / 2 + cover, B / 2 - cover
         
-        # Main Rebar Line
         ax.plot([left_x, right_x], [main_y, main_y], color="red", linewidth=2.5, label=f"Main Bar: {selected_main_bar}")
 
         hook_h = 0.12 if not is_imperial else 0.4
@@ -253,7 +257,6 @@ if calc_trigger or "wall_calc_state" in st.session_state:
             ax.plot([left_x, left_x], [main_y, main_y + hook_h], color="red", linewidth=2.5)
             ax.plot([right_x, right_x], [main_y, main_y + hook_h], color="red", linewidth=2.5)
         elif "180-Degree" in hook_type:
-            # Corrected Standard 180-degree Hook Geometry (Loops upwards and back inward)
             # Left 180 Hook
             ax.plot([left_x, left_x], [main_y, main_y + hook_h], color="red", linewidth=2.5)
             ax.plot([left_x, left_x + hook_r], [main_y + hook_h, main_y + hook_h + hook_r], color="red", linewidth=2.5)
@@ -421,12 +424,11 @@ if calc_trigger or "wall_calc_state" in st.session_state:
         st.markdown(f"• **Main Steel:** **{selected_main_bar} @ {s_main_final} {spacing_unit} c/c** ({hook_type})")
         st.markdown(f"• **Temp/Shrinkage Steel:** **{selected_temp_bar} @ {s_temp_final} {spacing_unit} c/c**")
 
-        st.subheader("4. Detailing & Structural Drawings")
-        tab1, tab2 = st.tabs(["Elevation Section", "Top Plan View"])
-        with tab1:
-            st.image(sec_img, caption="Footing Elevation Cross-Section Diagram")
-        with tab2:
-            st.image(plan_img, caption="Footing Structural Top Plan View")
+        st.subheader("4. Detailing Cross-Section Elevation View")
+        st.image(sec_img, caption="Footing Elevation Cross-Section Diagram", use_container_width=True)
+
+        st.subheader("5. Top Structural Plan View")
+        st.image(plan_img, caption="Footing Top Structural Plan View", use_container_width=True)
 
         st.markdown("---")
         st.download_button(
